@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Web Assistant — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <div class="options-container">
+
+    <!-- Header -->
+    <header class="options-header">
+      <div class="header-left">
+        <div class="header-logo">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm4 0h-2v-6h2v6zm-2-8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+        </div>
+        <div>
+          <h1>Claude Web Assistant</h1>
+          <p class="version-label">Version <span id="ext-version">1.0.0</span></p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Authentication Section -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/></svg>
+        Authentication
+      </h2>
+
+      <!-- Auth Source Selector -->
+      <div class="auth-source-selector">
+        <label class="radio-card" id="radio-card-bridge">
+          <input type="radio" name="authSource" value="bridge" checked>
+          <span class="radio-indicator"></span>
+          <div class="radio-content">
+            <span class="radio-label">Claude Code (Bridge)</span>
+            <span class="radio-desc">Connect via local Claude Code CLI</span>
+          </div>
+          <span class="active-badge" id="badge-bridge">Active</span>
+        </label>
+        <label class="radio-card" id="radio-card-apikey">
+          <input type="radio" name="authSource" value="apikey">
+          <span class="radio-indicator"></span>
+          <div class="radio-content">
+            <span class="radio-label">API Key</span>
+            <span class="radio-desc">Use your Anthropic API key directly</span>
+          </div>
+          <span class="active-badge" id="badge-apikey">Active</span>
+        </label>
+      </div>
+
+      <!-- Bridge Mode (Claude Code CLI) -->
+      <div class="auth-panel" id="auth-panel-bridge">
+        <div class="oauth-info">
+          <div class="oauth-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32"><path fill="#7C3AED" d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v12zm-2-1H6v-2h12v2zM6 12l2-2 1.5 1.5L12 9l4 4H6z"/></svg>
+          </div>
+          <p class="oauth-description">
+            Connect to Claude through your local Claude Code CLI. Install Claude Code and log in — the extension talks to it directly.
+          </p>
+        </div>
+
+        <div class="field-status" id="bridge-status">
+          <span class="status-dot" id="bridge-dot"></span>
+          <span id="bridge-status-text">Not connected</span>
+        </div>
+
+        <!-- Connection Mode Selector -->
+        <div class="field-group">
+          <label for="connection-mode-select">Connection Mode</label>
+          <select id="connection-mode-select">
+            <option value="native">Native Messaging (auto-start, recommended)</option>
+            <option value="http">HTTP Bridge (manual: node bridge.js)</option>
+          </select>
+          <p class="hint" id="connection-mode-hint">Native messaging auto-launches Claude Code when you send a message. Requires one-time setup.</p>
+        </div>
+
+        <!-- Setup Steps: Native Mode -->
+        <div class="bridge-setup-steps" id="setup-steps-native">
+          <div class="setup-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <span class="step-title">Install Claude Code</span>
+              <code class="step-command">npm install -g @anthropic-ai/claude-code</code>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <span class="step-title">Login to Claude</span>
+              <code class="step-command">claude login</code>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <span class="step-title">Register the native host (once)</span>
+              <code class="step-command">node install-host.js --extension-id YOUR_ID</code>
+              <p class="hint">Find your extension ID at chrome://extensions/ with Developer mode on</p>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">4</span>
+            <div class="step-content">
+              <span class="step-title">Restart Chrome, then test below</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Setup Steps: HTTP Mode -->
+        <div class="bridge-setup-steps hidden" id="setup-steps-http">
+          <div class="setup-step">
+            <span class="step-number">1</span>
+            <div class="step-content">
+              <span class="step-title">Install Claude Code</span>
+              <code class="step-command">npm install -g @anthropic-ai/claude-code</code>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">2</span>
+            <div class="step-content">
+              <span class="step-title">Login to Claude</span>
+              <code class="step-command">claude login</code>
+            </div>
+          </div>
+          <div class="setup-step">
+            <span class="step-number">3</span>
+            <div class="step-content">
+              <span class="step-title">Start the bridge server</span>
+              <code class="step-command">node bridge.js</code>
+              <p class="hint">Keep this terminal open while using the extension</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- HTTP Bridge URL (only for HTTP mode) -->
+        <div class="field-group hidden" id="bridge-url-group">
+          <label for="bridge-url-input">Bridge Server URL</label>
+          <div class="input-row">
+            <input type="text" id="bridge-url-input" placeholder="http://127.0.0.1:3456" spellcheck="false" value="http://127.0.0.1:3456">
+            <button class="btn btn-primary" id="save-bridge-url-btn">Save</button>
+          </div>
+        </div>
+
+        <button class="btn btn-outline" id="test-bridge-btn">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          Test Connection
+        </button>
+        <div class="test-result" id="bridge-test-result"></div>
+      </div>
+
+      <!-- API Key Mode -->
+      <div class="auth-panel hidden" id="auth-panel-apikey">
+        <div class="field-group">
+          <label for="api-key-input">Anthropic API Key</label>
+          <div class="input-row">
+            <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false">
+            <button class="btn btn-primary" id="save-api-key-btn">Save</button>
+          </div>
+          <div class="field-status" id="api-key-status">
+            <span class="status-dot" id="api-key-dot"></span>
+            <span id="api-key-status-text">No API key configured</span>
+          </div>
+        </div>
+        <button class="btn btn-outline" id="test-api-key-btn">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          Test Connection
+        </button>
+        <div class="test-result" id="test-result"></div>
+      </div>
+    </section>
+
+    <!-- General Settings -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        General Settings
+      </h2>
+
+      <div class="field-group">
+        <label for="model-select">Model</label>
+        <select id="model-select">
+          <option value="claude-sonnet-4-6">Claude Sonnet 4 (claude-sonnet-4-6)</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (claude-haiku-4-5-20251001)</option>
+          <option value="claude-opus-4-6">Claude Opus 4 (claude-opus-4-6)</option>
+        </select>
+      </div>
+
+      <div class="field-group">
+        <label for="max-tokens-slider">
+          Max Tokens: <span class="slider-value" id="max-tokens-value">4096</span>
+        </label>
+        <input type="range" id="max-tokens-slider" min="1024" max="8192" step="256" value="4096">
+        <div class="slider-labels">
+          <span>1024</span>
+          <span>8192</span>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Theme</label>
+        <select id="theme-select">
+          <option value="dark">Dark (Default)</option>
+          <option value="light" disabled>Light (Coming Soon)</option>
+        </select>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <span class="toggle-label">Auto-attach CDP</span>
+          <span class="toggle-desc">Automatically attach Chrome DevTools Protocol debugger when chat opens</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="auto-attach-cdp">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Per-Page Settings -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        Per-Page Settings
+      </h2>
+      <p class="card-description">Disable the extension on specific hostnames. The chat bubble will not appear on these sites.</p>
+
+      <div class="field-group">
+        <label for="hostname-input">Add Hostname</label>
+        <div class="input-row">
+          <input type="text" id="hostname-input" placeholder="example.com" spellcheck="false">
+          <button class="btn btn-primary" id="add-hostname-btn">Add</button>
+        </div>
+      </div>
+
+      <div id="hostname-list" class="hostname-list">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <div id="hostname-empty" class="hostname-empty">
+        No disabled hostnames. The extension is active on all sites.
+      </div>
+
+      <button class="btn btn-outline btn-danger btn-sm hidden" id="clear-hostnames-btn">Clear All Disabled Hostnames</button>
+    </section>
+
+    <!-- About Section -->
+    <section class="card">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        About
+      </h2>
+
+      <div class="about-info">
+        <div class="about-row">
+          <span>Extension Version</span>
+          <span id="about-version">1.0.0</span>
+        </div>
+        <div class="about-row">
+          <span>Powered by</span>
+          <span>Anthropic Claude AI</span>
+        </div>
+      </div>
+
+      <div class="about-links">
+        <a href="https://www.anthropic.com" target="_blank" rel="noopener noreferrer" class="about-link">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+          Anthropic Website
+        </a>
+        <a href="https://docs.anthropic.com/en/docs" target="_blank" rel="noopener noreferrer" class="about-link">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          API Documentation
+        </a>
+      </div>
+
+      <div class="danger-zone">
+        <h3>Danger Zone</h3>
+        <p>This will remove all saved settings, API keys, and session data. This action cannot be undone.</p>
+        <button class="btn btn-danger" id="reset-all-btn">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          Reset All Settings
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

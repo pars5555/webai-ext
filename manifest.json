@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Web Assistant",
+  "version": "1.0.0",
+  "description": "Chat with Claude AI directly on any webpage. Claude has access to page content, DOM, network, cookies, storage, and Chrome DevTools Protocol.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "debugger",
+    "cookies",
+    "webRequest",
+    "webNavigation",
+    "nativeMessaging",
+    "alarms",
+    "downloads",
+    "browsingData",
+    "history",
+    "bookmarks",
+    "topSites",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "utils/dom-inspector.js",
+        "utils/page-data-collector.js",
+        "content.js"
+      ],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
