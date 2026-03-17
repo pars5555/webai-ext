@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Claude Web Assistant",
+  "name": "AI Web Assistant",
   "version": "1.0.0",
-  "description": "Chat with Claude AI directly on any webpage. Claude has access to page content, DOM, network, cookies, storage, and Chrome DevTools Protocol.",
+  "description": "Chrome extension with AI-powered page analysis and debugging.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -12,14 +12,15 @@
     "cookies",
     "webRequest",
     "webNavigation",
-    "nativeMessaging",
     "alarms",
     "downloads",
     "browsingData",
     "history",
     "bookmarks",
     "topSites",
-    "notifications"
+    "notifications",
+    "sidePanel",
+    "identity"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -48,10 +49,12 @@
         "utils/page-data-collector.js",
         "content.js"
       ],
-      "css": ["styles.css"],
       "run_at": "document_idle"
     }
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "options_page": "options.html",
   "web_accessible_resources": [
     {

@@ -1,5 +1,7 @@
 node_modules/
-native-host/host.log
+server/logs/
+server/config.json
+server/system-prompt.md
 *.log
 .DS_Store
 Thumbs.db

@@ -1,5 +1,5 @@
 /**
- * Claude Web Assistant - Page Data Collector
+ * AI Web Assistant - Page Data Collector
  * Content script utility for collecting page metadata and diagnostics.
  * Injected alongside dom-inspector.js into web pages.
  */

@@ -1,4 +1,4 @@
-// utils/dom-inspector.js — DOM inspection utilities for Claude Web Assistant
+// utils/dom-inspector.js — DOM inspection utilities for AI Web Assistant
 
 (function() {
   'use strict';

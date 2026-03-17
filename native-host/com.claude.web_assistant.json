@@ -1,9 +1,0 @@
-{
-  "name": "com.claude.web_assistant",
-  "description": "Claude Web Assistant — Native messaging host bridging to Claude Code CLI",
-  "path": "D:\\xampp\\htdocs\\cloude_chrome_extension\\native-host\\host.bat",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://pljeakjipffhmhejnljchcijecnkedjc/"
-  ]
-}
