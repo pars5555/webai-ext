@@ -1,8 +1,8 @@
-# Claude Web Assistant — Chrome Extension
+# WebAI — Chrome Extension
 
 Chrome MV3 extension that puts Claude AI in your browser's side panel. Claude can see page content, execute JavaScript, control the browser via Chrome DevTools Protocol (CDP), and automate multi-step tasks.
 
-Connects to the [claude-server](../claude-server/) backend for multi-user authentication, billing, and Anthropic API proxying. Also supports a local Claude Code CLI bridge for development.
+Connects to the [claude-server](../claude-server/) backend (webai.pc.am) for authentication, billing, system prompt, and Anthropic API proxying.
 
 ## Architecture
 
@@ -15,38 +15,70 @@ Connects to the [claude-server](../claude-server/) backend for multi-user authen
 │  │ Chat UI      │  │ Service      │  │ Page data        │  │
 │  │ Auth/login   │  │ Worker       │  │ DOM inspector    │  │
 │  │ SSE stream   │  │ CDP control  │  │ Cookie/storage   │  │
-│  │ Markdown     │  │ Auto-exec    │  │ Performance      │  │
-│  │ File upload  │  │ Native host  │  │                  │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────┘  │
-│         │                 │                                  │
-│         │  Chrome APIs    │  chrome.debugger (CDP)           │
-└─────────┼─────────────────┼──────────────────────────────────┘
-          │                 │
-          │ fetch SSE       │ CDP commands
-          ▼                 ▼
-┌─────────────────────┐  ┌──────────────────────┐
-│ API Server          │  │ Browser Tab          │
-│ (claude-server)     │  │ Target page          │
-│ POST /api/chat      │  │ JS eval, DOM access  │
-│ JWT auth            │  │ Screenshots          │
-│ Anthropic proxy     │  │ Click/type/scroll    │
-└─────────────────────┘  └──────────────────────┘
+│  │ Auto-exec    │  │ Tab mgmt     │  │ Performance      │  │
+│  │ Markdown     │  │ Network log  │  │ Canvas capture   │  │
+│  │ File upload  │  │ OAuth flow   │  │                  │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────────┘  │
+│         │                 │                  │               │
+│         │  chrome.runtime │  chrome.debugger │ DOM access    │
+└─────────┼─────────────────┼──────────────────┼──────────────┘
+          │                 │                  │
+          │ fetch SSE       │ CDP commands     │ page context
+          ▼                 ▼                  ▼
+┌─────────────────────┐  ┌──────────────────────────────┐
+│ API Server          │  │ Browser Tab (target page)    │
+│ webai.pc.am         │  │ JS eval, DOM read/write      │
+│ POST /api/chat      │  │ Screenshots, navigation      │
+│ JWT auth + billing  │  │ Click, type, scroll          │
+│ Anthropic proxy     │  │ Network, cookies, storage    │
+│ DB system prompt    │  └──────────────────────────────┘
+└─────────────────────┘
 ```
 
-### Connection Modes
+## Full Chat Flow
 
-1. **Server Mode** (default) — Extension connects to `claude-server` via HTTP/SSE. Server proxies to Anthropic API. Multi-user auth, billing, admin dashboard.
-2. **Native Messaging** (legacy/dev) — Chrome auto-launches local bridge process that spawns Claude Code CLI. No server needed.
-3. **HTTP Bridge** (legacy/dev) — Run `node bridge.js` locally, extension connects via `localhost:3456`.
+```
+1. User types message in side panel
+   ↓
+2. sidepanel.js gathers page context from content.js
+   (URL, title, headings, selected text, console errors, etc.)
+   ↓
+3. POST /api/chat (SSE) to server with:
+   - messages[] (conversation history)
+   - pageContext {} (structured page data)
+   - model, maxTokens, tabId
+   - Authorization: Bearer <JWT>
+   ↓
+4. Server (chat.js):
+   - Validates JWT, checks trial/balance
+   - Gets system prompt from DB (admin-configured, includes CDP instructions)
+   - Appends pageContext to system prompt
+   - Streams to Anthropic API → SSE back to extension
+   ↓
+5. sidepanel.js renders response with markdown + syntax highlighting
+   ↓
+6. If response contains ```cdp or ```js code blocks:
+   → sidepanel.js extracts commands
+   → Sends CDP_COMMAND to background.js
+   → background.js attaches debugger (auto) and executes via chrome.debugger
+   → Results formatted and sent back to server as follow-up message
+   → Loop repeats (up to 20 iterations)
+   ↓
+7. When no more CDP/JS blocks → task complete, user can type next message
+```
 
-### Auto-Execution Loop (CDP Agent)
+### CDP Auto-Execution Loop
 
-When Claude outputs `cdp` or `js` code blocks, the extension automatically:
-1. Executes the commands via Chrome DevTools Protocol
-2. Sends the results back to Claude (auto-follow-up)
-3. Repeats up to 40 iterations
+The AI uses the DB system prompt (configured in admin panel) which instructs it to output CDP/JS commands in fenced code blocks. The extension automatically:
 
-This enables Claude to autonomously interact with web pages — clicking buttons, reading DOM, typing into fields, taking screenshots, navigating.
+1. Parses `\`\`\`cdp` blocks as JSON CDP commands (`{"method": "...", "params": {...}}`)
+2. Parses `\`\`\`js` / `\`\`\`javascript` blocks as JavaScript to run via `Runtime.evaluate`
+3. Executes each command through `background.js → chrome.debugger.sendCommand()`
+4. Formats results and sends them back to the AI as a follow-up user message
+5. The AI analyzes results and either sends more commands or gives a final answer
+6. Loop continues up to 20 iterations per user message
+
+This enables Claude to autonomously: click buttons, fill forms, read DOM, navigate pages, take screenshots, analyze network requests, inspect cookies/storage, and more.
 
 ## Features
 
@@ -54,13 +86,13 @@ This enables Claude to autonomously interact with web pages — clicking buttons
 - **Per-tab conversations** — each browser tab has isolated chat history
 - **Browser automation** — Claude clicks, types, scrolls, navigates using CDP
 - **Page context** — DOM, cookies, network requests, localStorage, performance metrics
-- **File attachments** — images, PDFs, text files, code files
+- **File attachments** — images, PDFs, text files, code files (drag & drop or paste)
 - **Auto-execution** — Claude runs CDP/JS commands in a loop until task complete
 - **Multi-user auth** — anonymous 5-min trial, email/password, Google/GitHub OAuth
 - **Usage tracking** — per-request token counting and cost calculation
-- **Context management** — auto-compaction when approaching token limit
-- **Syntax highlighting** — code blocks with language-specific highlighting
-- **Tool blocks** — collapsible sections showing CDP commands and results
+- **Context management** — auto-compaction when approaching 200K token limit
+- **Syntax highlighting** — code blocks with language-specific coloring
+- **Tool result blocks** — collapsible sections showing CDP commands and results
 
 ## Setup
 
@@ -71,9 +103,9 @@ This enables Claude to autonomously interact with web pages — clicking buttons
 3. Click "Load unpacked"
 4. Select this directory (`claudeCodeExtension/`)
 
-### 2. Start the API server
+### 2. API Server
 
-The extension requires the [claude-server](../claude-server/) backend:
+The extension connects to `https://webai.pc.am` by default. For local development:
 
 ```bash
 cd ../claude-server
@@ -83,48 +115,11 @@ npm install
 npm run dev
 ```
 
-Server runs at `http://localhost:3466`.
+Then change server URL in extension Options to `http://localhost:3466`.
 
-#### Docker alternative
+### 3. Use the extension
 
-```bash
-cd ../claude-server
-cp .env.example .env
-# Edit .env (set DB_HOST=host.docker.internal for Docker)
-docker compose up --build
-```
-
-#### MySQL setup
-
-The server auto-creates the `webai` database and all 14 tables. Just make sure MySQL/MariaDB is running:
-
-```bash
-# XAMPP
-# Start MySQL from XAMPP Control Panel
-
-# Or standalone
-mysql -u root
-# Server will CREATE DATABASE webai automatically
-```
-
-### 3. Configure server URL (optional)
-
-Default is `http://localhost:3466`. To change:
-- Open extension Options page (right-click extension icon → Options)
-- Or set in `chrome.storage.sync`: `chrome.storage.sync.set({ serverUrl: 'https://your-server.com' })`
-
-### 4. Create admin user (first time)
-
-1. Open the extension side panel → Sign Up with email/password
-2. Promote to admin in MySQL:
-   ```sql
-   UPDATE users SET role = 'admin' WHERE email = 'your@email.com';
-   ```
-3. Open `http://localhost:3466` → login with admin credentials → full admin panel
-
-### 5. Use the extension
-
-1. Click the extension icon → "Open Chat"
+1. Click the extension icon → side panel opens
 2. Choose "Try Free" (5-min trial) or sign in
 3. Start chatting — Claude sees the current page and can interact with it
 
@@ -157,60 +152,25 @@ Default is `http://localhost:3466`. To change:
 
 ---
 
-## Chat Flow
-
-```
-User types message
-  ↓
-sidepanel.js collects page context from background.js
-  ↓
-POST /api/chat (SSE) with Bearer token
-  ↓
-Server validates auth → streams to Anthropic → SSE back
-  ↓
-sidepanel.js renders markdown incrementally
-  ↓
-If response has CDP/JS blocks + auto-execute on:
-  → background.js executes CDP commands
-  → Results added to conversation
-  → New POST /api/chat (auto-follow-up loop, max 40x)
-```
-
-### Server-Side Processing
-1. Validates JWT, checks trial/balance
-2. Resolves API key: user's own (encrypted) → platform key
-3. Balance check if platform key
-4. Gets settings (global + user overrides) and system prompt
-5. Logs user message, streams to Anthropic
-6. Records usage, deducts balance, logs assistant response
-
----
-
 ## File Structure
 
 ```
 claudeCodeExtension/
-├── manifest.json               # MV3 config, permissions, scripts
-├── background.js               # Service worker: CDP, native host, auto-exec, OAuth
+├── manifest.json               # MV3 config, permissions, side panel
+├── background.js               # Service worker: CDP, message router, OAuth
 ├── sidepanel.html              # Chat UI + auth overlay
-├── sidepanel.js                # Chat logic, auth, SSE streaming, markdown
-├── sidepanel.css               # Dark theme, auth overlay, chat bubbles
-├── content.js                  # Page context, DOM commands
-├── popup.html                  # Extension popup (status, auth, open chat)
+├── sidepanel.js                # Chat logic, auth, SSE, auto-exec loop, markdown
+├── sidepanel.css               # Dark theme, chat bubbles, auth overlay
+├── content.js                  # Page context, DOM commands, command execution
+├── popup.html                  # Extension popup (status, open chat)
 ├── popup.js                    # Popup logic (auth status, server check)
-├── options.html / options.js   # Settings page
+├── options.html / options.js   # Settings page (server URL)
 ├── options.css                 # Settings styles
-├── bridge.js                   # HTTP bridge (legacy dev mode)
-├── install-host.js             # Native host installer
+├── styles.css                  # Shared styles
 ├── utils/
-│   ├── dom-inspector.js        # DOM structure/context gathering
-│   └── page-data-collector.js  # Performance, security, network data
-├── icons/                      # Extension icons (16, 48, 128px)
-├── native-host/                # Claude Code CLI bridge
-│   ├── host.js
-│   ├── host.bat
-│   └── com.claude.web_assistant.json
-└── server/                     # OLD embedded admin panel (replaced by claude-server)
+│   ├── dom-inspector.js        # DOM structure, headings, meta, selected text
+│   └── page-data-collector.js  # Performance, security, cookies, network
+└── icons/                      # Extension icons (16, 48, 128px)
 ```
 
 ---
@@ -226,29 +186,32 @@ claudeCodeExtension/
 | `/structure` | DOM tree overview |
 | `/highlight <selector>` | Highlight an element visually |
 | `/query <expr>` | Execute JavaScript expression |
-| `/cookies` | Page cookies |
+| `/cookies` | Page cookies (document + Chrome API) |
 | `/storage` | localStorage + sessionStorage |
 | `/performance` | Performance metrics |
 | `/sources` | Page HTML and scripts |
+| `/network` | Recent network requests |
+| `/cdp <method> [params]` | Manual CDP command |
+| `/logs` | Extension debug logs |
 | `/clear` | Clear chat history |
 
 ---
 
-## CDP Commands
+## CDP Commands (AI-Generated)
 
-Claude writes code blocks that get auto-executed:
+Claude writes fenced code blocks that the extension auto-executes:
 
-**JavaScript** (read-only):
+**JavaScript** (via Runtime.evaluate):
 ```js
 document.querySelector('.price').textContent
 ```
 
-**CDP** (interactions):
+**CDP** (direct Chrome DevTools Protocol):
 ```json
 {"method": "Input.dispatchMouseEvent", "params": {"type": "mousePressed", "x": 100, "y": 200, "button": "left"}}
 ```
 
-Common operations: click, type, navigate, screenshot, scroll, evaluate JS.
+Common operations: click, type, navigate, screenshot, scroll, evaluate JS, read DOM, inspect network, manage cookies.
 
 ---
 
@@ -259,19 +222,12 @@ Common operations: click, type, navigate, screenshot, scroll, evaluate JS.
 | `activeTab` | Access current tab URL/title |
 | `scripting` | Inject content scripts |
 | `storage` | Auth tokens, settings |
-| `tabs` | Tab management |
-| `debugger` | CDP access |
+| `tabs` | Tab management, per-tab chat |
+| `debugger` | CDP access (auto-attach) |
 | `cookies` | Read page cookies |
 | `webRequest` | Network request logging |
 | `webNavigation` | Page load tracking |
-| `nativeMessaging` | Claude Code CLI bridge |
 | `alarms` | Service worker keep-alive |
-| `downloads` | File downloads |
-| `browsingData` | Clear data commands |
-| `history` | Browser history access |
-| `bookmarks` | Bookmark access |
-| `topSites` | Top sites |
-| `notifications` | Desktop notifications |
 | `sidePanel` | Side panel API |
 | `identity` | OAuth web auth flow |
 | `<all_urls>` | Content scripts on any page |
@@ -305,7 +261,7 @@ Extension pushes logs to server at `POST /api/logs/system`. View in admin panel 
 
 ---
 
-## API Server Communication
+## API Communication
 
 | Feature | Endpoint | Method |
 |---------|----------|--------|
@@ -316,34 +272,12 @@ Extension pushes logs to server at `POST /api/logs/system`. View in admin panel 
 | Sessions | `/api/sessions` | POST/GET |
 | Logs | `/api/logs/*` | POST |
 
-Background.js handles locally:
-- CDP command execution
-- Page context (DOM, cookies, network)
-- Native messaging bridge (dev mode)
-- Tab management
-- Auto-execution loop
-
----
-
-## Legacy: Native Messaging (Claude Code CLI)
-
-For development without the server:
-
-### Install Native Host
-```bash
-node install-host.js --extension-id YOUR_EXTENSION_ID
-```
-
-### HTTP Bridge (alternative)
-```bash
-node bridge.js
-# Runs on http://127.0.0.1:3456
-```
-
-### Uninstall Native Host
-```bash
-node install-host.js --uninstall
-```
+Extension handles locally (background.js):
+- CDP command execution via `chrome.debugger`
+- Page context gathering (content.js)
+- Tab management (list, switch, create, close)
+- Network request logging
+- OAuth web auth flow
 
 ---
 
