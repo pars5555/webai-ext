@@ -1031,8 +1031,15 @@
       }
     }
 
-    // Build conversation entry — bare user message only (matches old system behavior)
-    const fullUserContent = userMessage + (extraContext ? '\n\n[Context: ' + extraContext + ']' : '');
+    // Prepend current page URL + title (matches old system's pageContext in system prompt)
+    const pageCtx = await getPageContext(tabId);
+    let pageHeader = '';
+    if (pageCtx) {
+      pageHeader = '[Page: ' + pageCtx.url + ' | Title: ' + pageCtx.title + ' | Tab: ' + pageCtx.tabId + ']\n';
+    }
+
+    // Build conversation entry — page header + bare user message (no tabs, no body text, no cookies)
+    const fullUserContent = pageHeader + userMessage + (extraContext ? '\n\n[Context: ' + extraContext + ']' : '');
 
     const imageAttachments = atts.filter(a => a.isImage);
     const textAttachments = atts.filter(a => !a.isImage);
