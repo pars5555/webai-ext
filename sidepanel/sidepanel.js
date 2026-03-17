@@ -9,6 +9,7 @@
   let isStreaming = false;
   let conversationHistory = [];
   let currentStreamText = '';
+  let chatSessionId = null; // CLI session ID — server manages context
   let currentTabId = null;
   let currentTabInfo = { url: '', title: '' };
 
@@ -30,6 +31,10 @@
   // Buffer stream messages for non-active tabs so they don't get lost
   // tabId → { streamText: string, ended: bool, fullText: string, error: string }
   const tabStreamBuffers = new Map();
+
+  // Background task context — holds task state independently of active tab view
+  // When a task is running and user switches tabs, this preserves the task's DOM and history
+  let taskCtx = null; // { originTab, container (offscreen div), history, sessionId, streamText }
 
   // Pending file/image attachments: Array of { name, type, dataUrl, base64, mediaType }
   let pendingAttachments = [];
@@ -53,18 +58,65 @@
     const tabChanged = oldTabId !== null && oldTabId !== tab.id;
 
     if (tabChanged) {
-      // Save current tab's chat state before switching (deep copy history to prevent cross-tab contamination)
-      tabChats.set(oldTabId, {
-        history: JSON.parse(JSON.stringify(conversationHistory)),
-        messagesHtml: messagesEl.innerHTML,
-        isStreaming: isStreaming,
-        streamText: currentStreamText,
-        inputValue: inputEl.value,
-        inputAttachments: [...pendingAttachments]
-      });
+      // Check if switching back to the background task's origin tab
+      if (taskCtx && tab.id === taskCtx.originTab) {
+        // Save the tab we're leaving
+        tabChats.set(oldTabId, {
+          history: JSON.parse(JSON.stringify(conversationHistory)),
+          messagesHtml: messagesEl.innerHTML,
+          isStreaming: false,
+          streamText: '',
+          inputValue: inputEl.value,
+          inputAttachments: [...pendingAttachments],
+          sessionId: chatSessionId,
+        });
 
-      // Note: Do NOT detach debugger from old tab — it may still be running
-      // an auto-execution loop. Debugger will be detached when the tab is closed.
+        // Restore task's DOM and state from offscreen container
+        messagesEl.innerHTML = taskCtx.container.innerHTML;
+        messagesEl.querySelectorAll('.claude-message-assistant .claude-message-bubble').forEach(attachCodeActions);
+        conversationHistory = taskCtx.history;
+        chatSessionId = taskCtx.sessionId;
+        currentStreamText = taskCtx.streamText;
+        isStreaming = taskCtx.isStreaming;
+        taskCtx.container.remove();
+        taskCtx = null;
+
+        currentTabId = tab.id;
+        currentTabInfo = { url: tab.url || '', title: tab.title || '' };
+        updateTabIndicator();
+        updateSendButton();
+        updateContextMeter();
+        scrollToBottom();
+        return;
+      }
+
+      // If a task is actively running on the current tab, move it to background
+      if ((isStreaming || taskTabId) && !taskCtx) {
+        const offscreen = document.createElement('div');
+        offscreen.style.display = 'none';
+        offscreen.innerHTML = messagesEl.innerHTML;
+        document.body.appendChild(offscreen);
+        taskCtx = {
+          originTab: oldTabId,
+          container: offscreen,
+          history: conversationHistory, // keep reference — auto-exec pushes here
+          sessionId: chatSessionId,
+          streamText: currentStreamText,
+          isStreaming: true,
+        };
+        // taskCtx is now the source of truth for the task tab — don't save to tabChats
+      } else {
+        // Normal save — no active task
+        tabChats.set(oldTabId, {
+          history: JSON.parse(JSON.stringify(conversationHistory)),
+          messagesHtml: messagesEl.innerHTML,
+          isStreaming: isStreaming,
+          streamText: currentStreamText,
+          inputValue: inputEl.value,
+          inputAttachments: [...pendingAttachments],
+          sessionId: chatSessionId,
+        });
+      }
     }
 
     currentTabId = tab.id;
@@ -74,7 +126,7 @@
     updateTabIndicator();
 
     if (tabChanged) {
-      // Reset streaming state for the old tab view
+      // Reset streaming state for the view (task continues in background via taskCtx)
       isStreaming = false;
       currentStreamText = '';
 
@@ -82,6 +134,7 @@
       const saved = tabChats.get(currentTabId);
       if (saved) {
         conversationHistory = JSON.parse(JSON.stringify(saved.history));
+        chatSessionId = saved.sessionId || null;
         messagesEl.innerHTML = saved.messagesHtml;
         // Re-attach code actions (copy buttons, etc.)
         messagesEl.querySelectorAll('.claude-message-assistant .claude-message-bubble').forEach(attachCodeActions);
@@ -92,6 +145,7 @@
         }
       } else {
         conversationHistory = [];
+        chatSessionId = null;
         messagesEl.innerHTML = getWelcomeHTML();
       }
       // Restore input state for this tab (or clear it)
@@ -238,18 +292,39 @@
   const userBadge = document.getElementById('claude-user-badge');
   const userBadgeText = document.getElementById('claude-user-badge-text');
 
-  // Load saved model preference
+  // Load saved model preference (local cache, then sync from server after auth)
   chrome.storage.sync.get(['model'], (result) => {
     if (result.model && modelSelect) {
       modelSelect.value = result.model;
     }
   });
 
-  // Save model on change
-  modelSelect.addEventListener('change', () => {
+  // Fetch user's model preference from server (called after auth)
+  async function syncModelFromServer() {
+    try {
+      const resp = await fetch(SERVER_URL + '/api/user/settings', { headers: getAuthHeaders() });
+      if (resp.ok) {
+        const settings = await resp.json();
+        if (settings.model) {
+          modelSelect.value = settings.model;
+          chrome.storage.sync.set({ model: settings.model });
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Save model on change — persist to server and local storage
+  modelSelect.addEventListener('change', async () => {
     const model = modelSelect.value;
     chrome.storage.sync.set({ model });
-    chrome.runtime.sendMessage({ type: 'CLEAR_SESSION' });
+    // Save to server so it's used for all chats
+    try {
+      await fetch(SERVER_URL + '/api/user/settings/model', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ value: model }),
+      });
+    } catch (e) { /* ignore */ }
   });
 
   // ---------------------------------------------------------------------------
@@ -415,6 +490,7 @@
       authOverlay.style.display = 'none';
     }
     updateUserBadge();
+    syncModelFromServer();
   }
 
   const userBalanceEl = document.getElementById('claude-user-balance');
@@ -705,16 +781,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Helper: request page context from content script via background
+  // Helper: get brief page context for the AI (URL, title)
   // ---------------------------------------------------------------------------
-  function requestPageContext(tabId) {
+  function getPageContext(tabId) {
     return new Promise((resolve) => {
-      chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' }, (response) => {
-        if (chrome.runtime.lastError || !response) {
-          resolve({});
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          resolve(null);
           return;
         }
-        resolve(response);
+        resolve({
+          url: tab.url || '',
+          title: tab.title || '',
+          tabId: tab.id,
+        });
       });
     });
   }
@@ -739,6 +819,7 @@
   // ---------------------------------------------------------------------------
   function clearChat() {
     conversationHistory = [];
+    chatSessionId = null; // Reset CLI session — next message starts fresh
     messagesEl.innerHTML = getWelcomeHTML();
     // Clear stored chat for this tab only
     if (currentTabId) tabChats.delete(currentTabId);
@@ -772,18 +853,29 @@
   }
 
   function stopCurrentStream() {
-    if (!isStreaming) return;
+    if (!isStreaming && !taskCtx) return;
+    // Signal the auto-execution loop to stop
+    autoExecCancelled = true;
     // Abort the fetch SSE connection
     if (currentAbortController) {
       currentAbortController.abort();
       currentAbortController = null;
     }
     // Also tell background.js to cancel any active stream
-    chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: currentTabId }, () => {
+    chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: taskTabId || currentTabId }, () => {
       if (chrome.runtime.lastError) { /* ignore */ }
     });
-    // Finalize the streaming message with what we have so far
-    onStreamEnd(currentStreamText, true);
+    // Clean up background task context if running
+    if (taskCtx) {
+      taskCtx.container.remove();
+      taskCtx = null;
+    }
+    // Reset auto-execution state
+    autoFollowUpCount = 0;
+    taskTabId = null;
+    isStreaming = false;
+    updateSendButton();
+    addSystemMessage('Stopped by user.');
   }
 
   // ---------------------------------------------------------------------------
@@ -830,7 +922,7 @@
   async function doSendMessage(text, attachments, alreadyShown) {
     // Reset auto-execution counter on new user message
     autoFollowUpCount = 0;
-    // Use the tab that this chat session is bound to, NOT the currently active tab.
+    // Lock the task to the tab where it was submitted
     let tabId = currentTabId;
     if (!tabId) {
       tabId = await getActiveTabId();
@@ -889,14 +981,28 @@
       }
     }
 
-    // Gather page context from content script
-    const pageContext = await requestPageContext(tabId);
-    if (extraContext) {
-      pageContext.extraContext = extraContext;
+    // Prepend page context so AI always knows which page it's on
+    const pageCtx = await getPageContext(tabId);
+    let pageHeader = '';
+    if (pageCtx) {
+      pageHeader = '[Page: ' + pageCtx.url + ' | Title: ' + pageCtx.title + ' | Tab: ' + pageCtx.tabId + ']\n';
+    }
+
+    // On first message of a session, auto-include all browser tabs so AI doesn't waste a step
+    const currentSessionId = taskCtx ? taskCtx.sessionId : chatSessionId;
+    let tabsContext = '';
+    if (!currentSessionId) {
+      try {
+        const allTabs = await new Promise(resolve => {
+          chrome.tabs.query({}, tabs => resolve(tabs || []));
+        });
+        const tabList = allTabs.map(t => '  ' + t.id + ' | ' + (t.title || '').substring(0, 60) + ' | ' + (t.url || '')).join('\n');
+        tabsContext = '\n[Browser Tabs]\n' + tabList + '\n';
+      } catch (e) { /* non-critical */ }
     }
 
     // Build conversation entry with attachments
-    const fullUserContent = userMessage + (extraContext ? '\n\n[Context: ' + extraContext + ']' : '');
+    const fullUserContent = pageHeader + userMessage + tabsContext + (extraContext ? '\n\n[Context: ' + extraContext + ']' : '');
 
     const imageAttachments = atts.filter(a => a.isImage);
     const textAttachments = atts.filter(a => !a.isImage);
@@ -927,8 +1033,11 @@
       conversationHistory.push({ role: 'user', content: historyContent });
     }
 
-    // Send via server SSE — pass page context separately, server merges with DB prompt
-    sendViaServerSSE(historyContent, null, tabId, pageContext);
+    // Lock task to this tab — all follow-ups will target this tab even if user switches
+    taskTabId = tabId;
+
+    // Send via server SSE — only message + tabId, server manages context via CLI sessions
+    sendViaServerSSE(historyContent, tabId);
 
     isStreaming = true;
     updateSendButton();
@@ -938,27 +1047,13 @@
   // ---------------------------------------------------------------------------
   // Server SSE Chat — direct fetch to /api/chat with streaming
   // ---------------------------------------------------------------------------
-  async function sendViaServerSSE(userMessage, systemPrompt, tabId, pageContext, retryCount) {
+  async function sendViaServerSSE(userMessage, tabId, retryCount) {
     retryCount = retryCount || 0;
 
-    const model = modelSelect ? modelSelect.value : 'claude-opus-4-6';
-    const maxTokens = 4096;
-
-    // Build messages array from conversation history
-    const messages = conversationHistory.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    }));
-
     const body = {
-      messages: messages,
-      model: model,
-      systemPrompt: systemPrompt,
-      maxTokens: maxTokens,
-      temperature: 0.7,
-      sessionId: undefined,
+      message: userMessage,
       tabId: tabId,
-      pageContext: pageContext || null
+      sessionId: (taskCtx ? taskCtx.sessionId : chatSessionId) || undefined,
     };
 
     const controller = new AbortController();
@@ -989,7 +1084,7 @@
             // Remove the streaming msg and retry
             const streamingMsg = document.getElementById('claude-streaming-msg');
             if (streamingMsg) streamingMsg.remove();
-            return sendViaServerSSE(userMessage, systemPrompt, tabId, pageContext, retryCount + 1);
+            return sendViaServerSSE(userMessage, tabId, retryCount + 1);
           } else {
             clearAuthState();
             showAuthOverlay();
@@ -1032,7 +1127,10 @@
 
           try {
             const event = JSON.parse(data);
-            if (event.type === 'delta') {
+            if (event.type === 'session') {
+              if (taskCtx) taskCtx.sessionId = event.sessionId;
+              else chatSessionId = event.sessionId;
+            } else if (event.type === 'delta') {
               fullResponse += event.text;
               onStreamDelta(event.text);
             } else if (event.type === 'done' && !streamEnded) {
@@ -1133,7 +1231,7 @@
             const contextStr = 'Network log (' + log.length + ' requests):\n' + JSON.stringify(log.slice(0, 50), null, 2);
             const userContent = '/network\n\n[Context: ' + contextStr + ']';
             conversationHistory.push({ role: 'user', content: userContent });
-            sendViaServerSSE(userContent, 'Analyze the network log.', tabId);
+            sendViaServerSSE(userContent, tabId);
             isStreaming = true;
             updateSendButton();
           }
@@ -1157,7 +1255,7 @@
           addMessageToUI('user', '/cookies');
           const userContent = '/cookies\n\n[Context: ' + contextStr + ']';
           conversationHistory.push({ role: 'user', content: userContent });
-          sendViaServerSSE(userContent, 'Analyze the cookies.', tabId);
+          sendViaServerSSE(userContent, tabId);
           isStreaming = true;
           updateSendButton();
         });
@@ -1197,7 +1295,7 @@
           addMessageToUI('user', '/cdp ' + arg);
           const userContent = '/cdp ' + arg + '\n\n[Context: ' + contextStr + ']';
           conversationHistory.push({ role: 'user', content: userContent });
-          sendViaServerSSE(userContent, 'Analyze the CDP result.', tabId);
+          sendViaServerSSE(userContent, tabId);
           isStreaming = true;
           updateSendButton();
         });
@@ -1224,34 +1322,49 @@
   // ---------------------------------------------------------------------------
   // Streaming handlers
   // ---------------------------------------------------------------------------
+  function getTaskContainer() {
+    return taskCtx ? taskCtx.container : messagesEl;
+  }
+
+  function getTaskHistory() {
+    return taskCtx ? taskCtx.history : conversationHistory;
+  }
+
   function onStreamStart() {
     currentStreamText = '';
+    if (taskCtx) taskCtx.streamText = '';
+    autoExecCancelled = false; // Reset cancellation flag on new stream
+    const container = getTaskContainer();
     const msgEl = createMessageElement('assistant', '');
     msgEl.id = 'claude-streaming-msg';
-    messagesEl.appendChild(msgEl);
-    scrollToBottom();
+    container.appendChild(msgEl);
+    if (!taskCtx) scrollToBottom();
   }
 
   function onStreamContinue(iteration) {
     isStreaming = true;
+    if (taskCtx) taskCtx.isStreaming = true;
     updateSendButton();
+    const container = getTaskContainer();
     let msgEl = document.getElementById('claude-streaming-msg');
     if (!msgEl) {
       msgEl = createMessageElement('assistant', '');
       msgEl.id = 'claude-streaming-msg';
-      messagesEl.appendChild(msgEl);
+      container.appendChild(msgEl);
     }
     currentStreamText += '\n\n';
+    if (taskCtx) taskCtx.streamText = currentStreamText;
     const bubble = msgEl.querySelector('.claude-message-bubble');
     if (bubble) {
       bubble.innerHTML = renderMarkdown(currentStreamText) +
         '<div class="claude-auto-exec-status">Executing step ' + iteration + '...</div>';
     }
-    scrollToBottom();
+    if (!taskCtx) scrollToBottom();
   }
 
   function onStreamDelta(text) {
     currentStreamText += text;
+    if (taskCtx) taskCtx.streamText = currentStreamText;
     const msgEl = document.getElementById('claude-streaming-msg');
     if (msgEl) {
       const bubble = msgEl.querySelector('.claude-message-bubble');
@@ -1260,15 +1373,42 @@
         attachCodeActions(bubble);
       }
     }
-    scrollToBottom();
+    if (!taskCtx) scrollToBottom();
   }
 
   // ── Auto-execution loop state ──────────────────────────────────────────────
   let autoFollowUpCount = 0;
-  const MAX_AUTO_FOLLOW_UPS = 20;
+  const MAX_AUTO_FOLLOW_UPS = 40;
+  let taskTabId = null; // The tab where the current task was submitted
+  let autoExecCancelled = false; // Set by stop button to break auto-execution loop
+
+  function finishTask() {
+    autoFollowUpCount = 0;
+    taskTabId = null;
+    isStreaming = false;
+    if (taskCtx) {
+      taskCtx.isStreaming = false;
+      // Save final state to tabChats so it can be restored when user switches back
+      tabChats.set(taskCtx.originTab, {
+        history: JSON.parse(JSON.stringify(taskCtx.history)),
+        messagesHtml: taskCtx.container.innerHTML,
+        isStreaming: false,
+        streamText: '',
+        inputValue: '',
+        inputAttachments: [],
+        sessionId: taskCtx.sessionId,
+      });
+      taskCtx.container.remove();
+      taskCtx = null;
+    }
+    updateSendButton();
+    inputEl.focus();
+    processQueue();
+  }
 
   function onStreamEnd(fullText, cancelled) {
     updateSendButton();
+    const hist = getTaskHistory();
 
     const msgEl = document.getElementById('claude-streaming-msg');
     if (msgEl) {
@@ -1283,34 +1423,40 @@
     }
 
     if (fullText && !cancelled) {
-      conversationHistory.push({ role: 'assistant', content: fullText });
+      hist.push({ role: 'assistant', content: fullText });
     }
 
-    updateContextMeter();
-    scrollToBottom();
+    if (!taskCtx) {
+      updateContextMeter();
+      scrollToBottom();
+    }
 
     // Auto-execute CDP/JS commands from AI response
-    if (fullText && !cancelled && currentTabId) {
-      executeCdpFromResponse(fullText, currentTabId).then(cdpResults => {
+    // Use taskTabId (locked at submission time) so tab switches don't break the loop
+    const execTabId = taskTabId || currentTabId;
+    if (fullText && !cancelled && execTabId) {
+      executeCdpFromResponse(fullText, execTabId).then(cdpResults => {
+        if (autoExecCancelled) {
+          addSystemMessage('Stopped by user.');
+          finishTask();
+          return;
+        }
         if (cdpResults && cdpResults.length > 0) {
           autoFollowUpCount++;
           if (autoFollowUpCount > MAX_AUTO_FOLLOW_UPS) {
-            autoFollowUpCount = 0;
-            isStreaming = false;
-            updateSendButton();
             addSystemMessage('Auto-execution limit reached (' + MAX_AUTO_FOLLOW_UPS + ' steps). Type a message to continue.');
-            inputEl.focus();
-            processQueue();
+            finishTask();
             return;
           }
 
-          // Show execution results as a system message
+          // Show execution results in chat so user can see what was sent to AI
           const chatResults = formatCdpResultsForChat(cdpResults);
-          addSystemMessage('Step ' + autoFollowUpCount + ' executed — ' + cdpResults.length + ' command(s)');
+          addSystemMessage('Step ' + autoFollowUpCount + ' executed — ' + cdpResults.length + ' command(s)' + chatResults);
 
           // Update conversation history: append results to assistant message
-          if (conversationHistory.length > 0) {
-            const last = conversationHistory[conversationHistory.length - 1];
+          const curHist = getTaskHistory();
+          if (curHist.length > 0) {
+            const last = curHist[curHist.length - 1];
             if (last.role === 'assistant') {
               last.content += chatResults;
             }
@@ -1318,33 +1464,22 @@
 
           // Send results back to AI for next step (new assistant bubble will be created)
           const followUpPrompt = formatCdpResultsAsPrompt(cdpResults);
-          conversationHistory.push({ role: 'user', content: followUpPrompt });
+          curHist.push({ role: 'user', content: followUpPrompt });
 
           isStreaming = true;
+          if (taskCtx) taskCtx.isStreaming = true;
           updateSendButton();
-          sendViaServerSSE(followUpPrompt, null, currentTabId, null);
+          sendViaServerSSE(followUpPrompt, execTabId);
         } else {
           // No CDP blocks — task is done
-          autoFollowUpCount = 0;
-          isStreaming = false;
-          updateSendButton();
-          inputEl.focus();
-          processQueue();
+          finishTask();
         }
       }).catch(e => {
         console.error('CDP auto-exec error:', e);
-        autoFollowUpCount = 0;
-        isStreaming = false;
-        updateSendButton();
-        inputEl.focus();
-        processQueue();
+        finishTask();
       });
     } else {
-      autoFollowUpCount = 0;
-      isStreaming = false;
-      updateSendButton();
-      inputEl.focus();
-      processQueue();
+      finishTask();
     }
   }
 
@@ -1352,6 +1487,7 @@
 
   async function executeCdpFromResponse(responseText, tabId) {
     if (!responseText || !tabId) return null;
+    if (autoExecCancelled) return null;
 
     const results = [];
 
@@ -1359,15 +1495,100 @@
     const cdpRegex = /```cdp\s*\n([\s\S]*?)```/g;
     let match;
     while ((match = cdpRegex.exec(responseText)) !== null) {
+      if (autoExecCancelled) return results;
       const rawCmd = match[1].trim();
       try {
-        const cmd = JSON.parse(rawCmd);
+        let cmd;
+        try {
+          cmd = JSON.parse(rawCmd);
+        } catch (jsonErr) {
+          // AI wrote non-JSON in cdp block — try to recover
+          // Case 1: AI wrote bare JS like "await page.evaluate(...)" or "document.querySelector(...)"
+          // Treat as JS and execute via Runtime.evaluate
+          if (/^(await\s|document\.|window\.|var |let |const |function |\(|Array\.)/.test(rawCmd)) {
+            var hasAwait = rawCmd.includes('await ');
+            let safeExpr = rawCmd.replace(/\b(const|let)\s+/g, 'var ');
+            if ((safeExpr.includes(';') || safeExpr.includes('\n') || hasAwait) && !safeExpr.startsWith('(function') && !safeExpr.startsWith('(async')) {
+              safeExpr = (hasAwait ? '(async function(){' : '(function(){') + safeExpr + '})()';
+            }
+            const res = await sendCdpCommand(tabId, 'Runtime.evaluate', { expression: safeExpr, returnByValue: true, awaitPromise: true });
+            if (res.status === 'ok' && !res.result?.exceptionDetails) {
+              const val = res.result?.result?.value;
+              results.push({ type: 'js', result: (val !== undefined ? (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)) : '(undefined)').substring(0, 5000) });
+            } else {
+              const errMsg = res.result?.exceptionDetails?.exception?.description || res.error || 'Unknown error';
+              results.push({ type: 'js_error', error: errMsg });
+            }
+            continue;
+          }
+          // Case 2: Looks like "Method.name { params }" without proper JSON
+          const methodMatch = rawCmd.match(/^([A-Z][a-zA-Z]+\.[a-zA-Z]+)\s*(\{[\s\S]*\})?$/);
+          if (methodMatch) {
+            const method = methodMatch[1];
+            let params = {};
+            if (methodMatch[2]) {
+              try { params = JSON.parse(methodMatch[2]); } catch (e) { /* ignore */ }
+            }
+            const res = await sendCdpCommand(tabId, method, params);
+            if (res.status === 'ok') {
+              results.push({ type: 'cdp', method: method, result: JSON.stringify(res.result, null, 2).substring(0, 5000) });
+            } else {
+              results.push({ type: 'cdp_error', method: method, error: res.error || 'Unknown error' });
+            }
+            continue;
+          }
+          // Can't recover — give helpful error
+          results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: 'Invalid JSON in cdp block. Correct format: {"method": "Runtime.evaluate", "params": {"expression": "..."}}. For JS code, use a ```js block instead.' });
+          continue;
+        }
+        // AI sometimes puts ext commands in cdp blocks — detect and route
+        if (cmd.action && !cmd.method) {
+          // Try to auto-fix common action→method mappings
+          const actionFixes = {
+            'evaluate': { method: 'Runtime.evaluate', paramKey: 'expression' },
+            'click': null, // needs coordinates, route to ext or error
+            'screenshot': { method: 'Page.captureScreenshot', paramKey: null },
+            'navigate': { method: 'Page.navigate', paramKey: 'url' },
+          };
+          const normalizedAction = (cmd.action || '').toLowerCase().replace(/[_\-\s]/g, '');
+          const fix = actionFixes[normalizedAction];
+          if (fix) {
+            cmd.method = fix.method;
+            if (!cmd.params) {
+              cmd.params = {};
+              if (fix.paramKey && cmd[fix.paramKey]) cmd.params[fix.paramKey] = cmd[fix.paramKey];
+              // Copy expression/url from top level to params
+              if (cmd.expression && !cmd.params.expression) cmd.params.expression = cmd.expression;
+              if (cmd.url && !cmd.params.url) cmd.params.url = cmd.url;
+            }
+          } else {
+            // Route to ext handler
+            const res = await handleExtInAutoExec(cmd);
+            results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
+            if (res.tabId) {
+              tabId = res.tabId;
+              taskTabId = res.tabId;
+            }
+            continue;
+          }
+        }
         if (cmd.method) {
-          const res = await sendCdpCommand(tabId, cmd.method, cmd.params || {});
+          // AI may include tabId in the command — use it to target a specific tab
+          const targetTab = cmd.tabId || tabId;
+          // Safety: if AI uses Runtime.evaluate, fix const/let and wrap in IIFE
+          if (cmd.method === 'Runtime.evaluate' && cmd.params?.expression) {
+            let expr = cmd.params.expression.replace(/\b(const|let)\s+/g, 'var ');
+            if ((expr.includes(';') || expr.includes('\n') || expr.includes('await ')) && !expr.startsWith('(function') && !expr.startsWith('(async')) {
+              var exprAsync = expr.includes('await ');
+              expr = (exprAsync ? '(async function(){' : '(function(){') + expr + '})()';
+            }
+            cmd.params.expression = expr;
+          }
+          const res = await sendCdpCommand(targetTab, cmd.method, cmd.params || {});
           if (res.status === 'ok') {
             let displayResult = JSON.stringify(res.result, null, 2);
             if (cmd.method === 'Page.captureScreenshot' && res.result?.data) {
-              displayResult = '{"data": "(base64 image, ' + res.result.data.length + ' chars)"}';
+              displayResult = '{"screenshot": "captured", "size": ' + res.result.data.length + ', "note": "Screenshot captured. Base64 data available. Prefer DOM reading for text content."}';
             }
             results.push({ type: 'cdp', method: cmd.method, result: (displayResult || '').substring(0, 5000) });
           } else {
@@ -1375,16 +1596,23 @@
           }
         }
       } catch (e) {
-        results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: e.message });
+        results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: e.message + '. CDP blocks must contain valid JSON: {"method": "CDP.Method", "params": {...}}. For JS code use ```js blocks instead.' });
       }
     }
 
     // Match ```js ... ``` or ```javascript ... ``` blocks — execute via Runtime.evaluate
     const jsRegex = /```(?:js|javascript)\s*\n([\s\S]*?)```/g;
     while ((match = jsRegex.exec(responseText)) !== null) {
+      if (autoExecCancelled) return results;
       const code = match[1].trim();
       try {
-        const safeCode = code.replace(/\b(const|let)\s+/g, 'var ');
+        // Replace const/let with var and wrap in IIFE to avoid redeclaration errors
+        let safeCode = code.replace(/\b(const|let)\s+/g, 'var ');
+        // Wrap multi-statement code or code with await in IIFE if not already wrapped
+        if ((safeCode.includes(';') || safeCode.includes('\n') || safeCode.includes('await ')) && !safeCode.startsWith('(function') && !safeCode.startsWith('(async')) {
+          var needsAsync = safeCode.includes('await ');
+          safeCode = (needsAsync ? '(async function(){' : '(function(){') + safeCode + '})()';
+        }
         const res = await sendCdpCommand(tabId, 'Runtime.evaluate', {
           expression: safeCode,
           returnByValue: true,
@@ -1422,7 +1650,79 @@
       }
     }
 
+    // Match ```ext ... ``` blocks — extension-level commands (tab management, etc.)
+    const extRegex = /```ext\s*\n([\s\S]*?)```/g;
+    while ((match = extRegex.exec(responseText)) !== null) {
+      if (autoExecCancelled) return results;
+      const rawCmd = match[1].trim();
+      try {
+        const cmd = JSON.parse(rawCmd);
+        const res = await handleExtInAutoExec(cmd);
+        results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
+
+        if (res.tabId) {
+          tabId = res.tabId;
+          taskTabId = res.tabId;
+        }
+      } catch (e) {
+        results.push({ type: 'ext_error', action: rawCmd.substring(0, 50), error: e.message });
+      }
+    }
+
     return results.length > 0 ? results : null;
+  }
+
+  // Handle ext commands during auto-execution:
+  // switchTab/activateTab brings the tab to foreground AND targets it for CDP
+  async function handleExtInAutoExec(cmd) {
+    const action = (cmd.action || '').toLowerCase().replace(/[_\-\s]/g, '');
+    // Tab switching: activate the tab in Chrome AND set it as CDP target
+    // Also auto-fetch DOM snapshot so AI knows what's on the page without wasting a step
+    if (['switchtab', 'activatetab', 'focustab', 'activate', 'focus', 'selecttab'].includes(action)) {
+      const tid = cmd.tabId || cmd.id;
+      if (!tid) return { error: 'No tabId provided for ' + cmd.action };
+      // Actually activate the tab in Chrome (bring to foreground)
+      const tabInfo = await new Promise(resolve => {
+        chrome.tabs.update(tid, { active: true }, (tab) => {
+          if (chrome.runtime.lastError) {
+            resolve({ error: chrome.runtime.lastError.message });
+          } else {
+            resolve({ tabId: tab.id, url: tab.url, title: tab.title, status: 'targeted' });
+          }
+        });
+      });
+      if (tabInfo.error) return tabInfo;
+      // Auto-fetch page DOM snapshot so AI gets context immediately
+      try {
+        const domRes = await sendCdpCommand(tid, 'Runtime.evaluate', {
+          expression: '(function(){ var t = document.title; var u = window.location.href; var text = (document.body && document.body.innerText || "").slice(0, 3000); return JSON.stringify({title: t, url: u, bodyText: text}); })()',
+          returnByValue: true,
+          awaitPromise: false,
+        });
+        if (domRes.status === 'ok' && domRes.result?.result?.value) {
+          try {
+            tabInfo.pageSnapshot = JSON.parse(domRes.result.result.value);
+          } catch (e) {
+            tabInfo.pageSnapshot = domRes.result.result.value;
+          }
+        }
+      } catch (e) { /* non-critical — AI can still fetch DOM manually */ }
+      return tabInfo;
+    }
+    // All other ext commands (listTabs, createTab, closeTab) go through normally
+    return executeExtCommand(cmd);
+  }
+
+  function executeExtCommand(cmd) {
+    return new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: 'EXT_COMMAND', ...cmd }, response => {
+        if (chrome.runtime.lastError) {
+          resolve({ error: chrome.runtime.lastError.message });
+        } else {
+          resolve(response || { error: 'No response' });
+        }
+      });
+    });
   }
 
   function sendCdpCommand(tabId, method, params) {
@@ -1443,6 +1743,8 @@
       if (r.type === 'cdp_error') return '\n\n---\n**CDP Error** (`' + r.method + '`): ' + r.error;
       if (r.type === 'js') return '\n\n---\n**JS Result:**\n```\n' + r.result + '\n```';
       if (r.type === 'js_error') return '\n\n---\n**JS Error:** ' + r.error;
+      if (r.type === 'ext') return '\n\n---\n**Extension** (`' + r.action + '`):\n```json\n' + r.result + '\n```';
+      if (r.type === 'ext_error') return '\n\n---\n**Extension Error** (`' + r.action + '`): ' + r.error;
       return '';
     }).join('');
   }
@@ -1454,23 +1756,27 @@
       if (r.type === 'cdp_error') prompt += 'CDP ' + r.method + ' ERROR: ' + r.error + '\n\n';
       if (r.type === 'js') prompt += 'JS execution returned:\n' + r.result + '\n\n';
       if (r.type === 'js_error') prompt += 'JS execution ERROR: ' + r.error + '\n\n';
+      if (r.type === 'ext') prompt += 'Extension ' + r.action + ' returned:\n' + r.result + '\n\n';
+      if (r.type === 'ext_error') prompt += 'Extension ' + r.action + ' ERROR: ' + r.error + '\n\n';
     }
-    prompt += 'Based on these results, continue with the task. If the task is complete, summarize what was done. If more steps are needed, provide the next CDP/JS commands to execute.';
+    prompt += 'Based on these results, continue with the task. If the task is complete, summarize what was done. If more steps are needed, provide the next CDP/JS commands to execute. Remember: read DOM first (js/DOM.getDocument), use CDP Input for clicks, never use element.click() in SPAs.';
     return prompt;
   }
 
   function onStreamError(error) {
     isStreaming = false;
+    if (taskCtx) taskCtx.isStreaming = false;
     updateSendButton();
 
     const streamingMsg = document.getElementById('claude-streaming-msg');
     if (streamingMsg) streamingMsg.remove();
 
+    const container = getTaskContainer();
     const errorEl = document.createElement('div');
     errorEl.className = 'claude-error-msg';
     errorEl.innerHTML = ICONS.error + '<span>' + escapeHtml(error) + '</span>';
-    messagesEl.appendChild(errorEl);
-    scrollToBottom();
+    container.appendChild(errorEl);
+    if (!taskCtx) scrollToBottom();
     inputEl.focus();
 
     // Process any queued messages
@@ -1491,13 +1797,19 @@
     const el = document.createElement('div');
     el.className = 'claude-system-msg';
     el.textContent = text;
-    messagesEl.appendChild(el);
-    scrollToBottom();
+    const container = getTaskContainer();
+    container.appendChild(el);
+    if (!taskCtx) scrollToBottom();
   }
 
   function createMessageElement(role, text) {
     const wrapper = document.createElement('div');
     wrapper.className = 'claude-message claude-message-' + role;
+
+    const label = document.createElement('div');
+    label.className = 'claude-message-label';
+    label.textContent = role === 'user' ? 'You' : 'AI';
+    wrapper.appendChild(label);
 
     const bubble = document.createElement('div');
     bubble.className = 'claude-message-bubble';
