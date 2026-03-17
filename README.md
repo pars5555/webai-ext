@@ -62,7 +62,7 @@ Connects to the [claude-server](../claude-server/) backend (webai.pc.am) for aut
    → Sends CDP_COMMAND to background.js
    → background.js attaches debugger (auto) and executes via chrome.debugger
    → Results formatted and sent back to server as follow-up message
-   → Loop repeats (up to 20 iterations)
+   → Loop repeats (up to maxAutoFollowUps iterations, default 40)
    ↓
 7. When no more CDP/JS blocks → task complete, user can type next message
 ```
@@ -76,7 +76,7 @@ The AI uses the DB system prompt (configured in admin panel) which instructs it 
 3. Executes each command through `background.js → chrome.debugger.sendCommand()`
 4. Formats results and sends them back to the AI as a follow-up user message
 5. The AI analyzes results and either sends more commands or gives a final answer
-6. Loop continues up to 20 iterations per user message
+6. Loop continues up to `maxAutoFollowUps` iterations per user message (configurable in admin, default 40)
 
 This enables Claude to autonomously: click buttons, fill forms, read DOM, navigate pages, take screenshots, analyze network requests, inspect cookies/storage, and more.
 
