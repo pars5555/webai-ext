@@ -1500,181 +1500,137 @@
 
     const results = [];
 
-    // Match ```cdp ... ``` blocks
-    const cdpRegex = /```cdp\s*\n([\s\S]*?)```/g;
+    // Parse ALL blocks in document order (not grouped by type)
+    const allBlocksRegex = /```(cdp|js|javascript|ext)\s*\n([\s\S]*?)```/g;
     let match;
-    while ((match = cdpRegex.exec(responseText)) !== null) {
+    while ((match = allBlocksRegex.exec(responseText)) !== null) {
       if (autoExecCancelled) return results;
-      const rawCmd = match[1].trim();
-      try {
-        let cmd;
+      const blockType = match[1] === 'javascript' ? 'js' : match[1];
+      const rawCmd = match[2].trim();
+
+      if (blockType === 'ext') {
+        // ── ext block: tab management ──
         try {
-          cmd = JSON.parse(rawCmd);
-        } catch (jsonErr) {
-          // AI wrote non-JSON in cdp block — try to recover
-          // Case 1: AI wrote bare JS like "await page.evaluate(...)" or "document.querySelector(...)"
-          // Treat as JS and execute via Runtime.evaluate
-          if (/^(await\s|document\.|window\.|var |let |const |function |\(|Array\.)/.test(rawCmd)) {
-            var hasAwait = rawCmd.includes('await ');
-            let safeExpr = rawCmd.replace(/\b(const|let)\s+/g, 'var ');
-            if ((safeExpr.includes(';') || safeExpr.includes('\n') || hasAwait) && !safeExpr.startsWith('(function') && !safeExpr.startsWith('(async')) {
-              safeExpr = (hasAwait ? '(async function(){' : '(function(){') + safeExpr + '})()';
-            }
-            const res = await sendCdpCommand(tabId, 'Runtime.evaluate', { expression: safeExpr, returnByValue: true, awaitPromise: true });
-            if (res.status === 'ok' && !res.result?.exceptionDetails) {
-              const val = res.result?.result?.value;
-              results.push({ type: 'js', result: (val !== undefined ? (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)) : '(undefined)').substring(0, 5000) });
-            } else {
-              const errMsg = res.result?.exceptionDetails?.exception?.description || res.error || 'Unknown error';
-              results.push({ type: 'js_error', error: errMsg });
-            }
-            continue;
+          const cmd = JSON.parse(rawCmd);
+          const res = await handleExtInAutoExec(cmd);
+          results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
+          if (res.tabId) {
+            tabId = res.tabId;
+            taskTabId = res.tabId;
           }
-          // Case 2: Looks like "Method.name { params }" without proper JSON
-          const methodMatch = rawCmd.match(/^([A-Z][a-zA-Z]+\.[a-zA-Z]+)\s*(\{[\s\S]*\})?$/);
-          if (methodMatch) {
-            const method = methodMatch[1];
-            let params = {};
-            if (methodMatch[2]) {
-              try { params = JSON.parse(methodMatch[2]); } catch (e) { /* ignore */ }
-            }
-            const res = await sendCdpCommand(tabId, method, params);
-            if (res.status === 'ok') {
-              results.push({ type: 'cdp', method: method, result: JSON.stringify(res.result, null, 2).substring(0, 5000) });
-            } else {
-              results.push({ type: 'cdp_error', method: method, error: res.error || 'Unknown error' });
-            }
-            continue;
-          }
-          // Can't recover — give helpful error
-          results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: 'Invalid JSON in cdp block. Correct format: {"method": "Runtime.evaluate", "params": {"expression": "..."}}. For JS code, use a ```js block instead.' });
-          continue;
+        } catch (e) {
+          results.push({ type: 'ext_error', action: rawCmd.substring(0, 50), error: e.message });
         }
-        // AI sometimes puts ext commands in cdp blocks — detect and route
-        if (cmd.action && !cmd.method) {
-          // Try to auto-fix common action→method mappings
-          const actionFixes = {
-            'evaluate': { method: 'Runtime.evaluate', paramKey: 'expression' },
-            'click': null, // needs coordinates, route to ext or error
-            'screenshot': { method: 'Page.captureScreenshot', paramKey: null },
-            'navigate': { method: 'Page.navigate', paramKey: 'url' },
-          };
-          const normalizedAction = (cmd.action || '').toLowerCase().replace(/[_\-\s]/g, '');
-          const fix = actionFixes[normalizedAction];
-          if (fix) {
-            cmd.method = fix.method;
-            if (!cmd.params) {
-              cmd.params = {};
-              if (fix.paramKey && cmd[fix.paramKey]) cmd.params[fix.paramKey] = cmd[fix.paramKey];
-              // Copy expression/url from top level to params
-              if (cmd.expression && !cmd.params.expression) cmd.params.expression = cmd.expression;
-              if (cmd.url && !cmd.params.url) cmd.params.url = cmd.url;
+
+      } else if (blockType === 'js') {
+        // ── js block: read DOM via Runtime.evaluate ──
+        try {
+          let safeCode = rawCmd.replace(/\b(const|let)\s+/g, 'var ');
+          if ((safeCode.includes(';') || safeCode.includes('\n') || safeCode.includes('await ')) && !safeCode.startsWith('(function') && !safeCode.startsWith('(async')) {
+            var needsAsync = safeCode.includes('await ');
+            safeCode = (needsAsync ? '(async function(){' : '(function(){') + safeCode + '})()';
+          }
+          const res = await sendCdpCommand(tabId, 'Runtime.evaluate', {
+            expression: safeCode,
+            returnByValue: true,
+            awaitPromise: true,
+            generatePreview: true,
+          });
+          if (res.status === 'ok') {
+            const result = res.result;
+            if (result?.exceptionDetails) {
+              results.push({ type: 'js_error', error: 'Error: ' + (result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Unknown error') });
+            } else {
+              const value = result?.result?.value;
+              const preview = result?.result?.preview;
+              const desc = result?.result?.description;
+              let display;
+              if (value !== undefined && value !== null) {
+                display = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+              } else if (preview) {
+                display = JSON.stringify(preview, null, 2);
+              } else if (desc) {
+                display = desc;
+              } else {
+                display = '(' + (result?.result?.type || 'undefined') + ')';
+              }
+              results.push({ type: 'js', result: display.substring(0, 5000) });
             }
           } else {
-            // Route to ext handler
+            results.push({ type: 'js_error', error: res.error || 'Unknown error' });
+          }
+        } catch (e) {
+          results.push({ type: 'js_error', error: e.message });
+        }
+
+      } else if (blockType === 'cdp') {
+        // ── cdp block: CDP protocol commands ──
+        try {
+          let cmd;
+          try {
+            cmd = JSON.parse(rawCmd);
+          } catch (jsonErr) {
+            // Recovery: bare JS in cdp block
+            if (/^(await\s|document\.|window\.|var |let |const |function |\(|Array\.)/.test(rawCmd)) {
+              var hasAwait = rawCmd.includes('await ');
+              let safeExpr = rawCmd.replace(/\b(const|let)\s+/g, 'var ');
+              if ((safeExpr.includes(';') || safeExpr.includes('\n') || hasAwait) && !safeExpr.startsWith('(function') && !safeExpr.startsWith('(async')) {
+                safeExpr = (hasAwait ? '(async function(){' : '(function(){') + safeExpr + '})()';
+              }
+              const res = await sendCdpCommand(tabId, 'Runtime.evaluate', { expression: safeExpr, returnByValue: true, awaitPromise: true });
+              if (res.status === 'ok' && !res.result?.exceptionDetails) {
+                const val = res.result?.result?.value;
+                results.push({ type: 'js', result: (val !== undefined ? (typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)) : '(undefined)').substring(0, 5000) });
+              } else {
+                results.push({ type: 'js_error', error: res.result?.exceptionDetails?.exception?.description || res.error || 'Unknown error' });
+              }
+              continue;
+            }
+            // Recovery: "Method.name { params }" shorthand
+            const methodMatch = rawCmd.match(/^([A-Z][a-zA-Z]+\.[a-zA-Z]+)\s*(\{[\s\S]*\})?$/);
+            if (methodMatch) {
+              const method = methodMatch[1];
+              let params = {};
+              if (methodMatch[2]) { try { params = JSON.parse(methodMatch[2]); } catch (e) {} }
+              const res = await sendCdpCommand(tabId, method, params);
+              results.push(res.status === 'ok'
+                ? { type: 'cdp', method, result: JSON.stringify(res.result, null, 2).substring(0, 5000) }
+                : { type: 'cdp_error', method, error: res.error || 'Unknown error' });
+              continue;
+            }
+            results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: 'Invalid JSON. Use: {"method": "...", "params": {...}}' });
+            continue;
+          }
+          // ext command in cdp block — route it
+          if (cmd.action && !cmd.method) {
             const res = await handleExtInAutoExec(cmd);
             results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
-            if (res.tabId) {
-              tabId = res.tabId;
-              taskTabId = res.tabId;
-            }
+            if (res.tabId) { tabId = res.tabId; taskTabId = res.tabId; }
             continue;
           }
-        }
-        if (cmd.method) {
-          // AI may include tabId in the command — use it to target a specific tab
-          const targetTab = cmd.tabId || tabId;
-          // Safety: if AI uses Runtime.evaluate, fix const/let and wrap in IIFE
-          if (cmd.method === 'Runtime.evaluate' && cmd.params?.expression) {
-            let expr = cmd.params.expression.replace(/\b(const|let)\s+/g, 'var ');
-            if ((expr.includes(';') || expr.includes('\n') || expr.includes('await ')) && !expr.startsWith('(function') && !expr.startsWith('(async')) {
-              var exprAsync = expr.includes('await ');
-              expr = (exprAsync ? '(async function(){' : '(function(){') + expr + '})()';
+          if (cmd.method) {
+            const targetTab = cmd.tabId || tabId;
+            if (cmd.method === 'Runtime.evaluate' && cmd.params?.expression) {
+              let expr = cmd.params.expression.replace(/\b(const|let)\s+/g, 'var ');
+              if ((expr.includes(';') || expr.includes('\n') || expr.includes('await ')) && !expr.startsWith('(function') && !expr.startsWith('(async')) {
+                expr = (expr.includes('await ') ? '(async function(){' : '(function(){') + expr + '})()';
+              }
+              cmd.params.expression = expr;
             }
-            cmd.params.expression = expr;
-          }
-          const res = await sendCdpCommand(targetTab, cmd.method, cmd.params || {});
-          if (res.status === 'ok') {
-            let displayResult = JSON.stringify(res.result, null, 2);
-            if (cmd.method === 'Page.captureScreenshot' && res.result?.data) {
-              displayResult = '{"screenshot": "captured", "size": ' + res.result.data.length + ', "note": "Screenshot captured. Base64 data available. Prefer DOM reading for text content."}';
-            }
-            results.push({ type: 'cdp', method: cmd.method, result: (displayResult || '').substring(0, 5000) });
-          } else {
-            results.push({ type: 'cdp_error', method: cmd.method, error: res.error || 'Unknown error' });
-          }
-        }
-      } catch (e) {
-        results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: e.message + '. CDP blocks must contain valid JSON: {"method": "CDP.Method", "params": {...}}. For JS code use ```js blocks instead.' });
-      }
-    }
-
-    // Match ```js ... ``` or ```javascript ... ``` blocks — execute via Runtime.evaluate
-    const jsRegex = /```(?:js|javascript)\s*\n([\s\S]*?)```/g;
-    while ((match = jsRegex.exec(responseText)) !== null) {
-      if (autoExecCancelled) return results;
-      const code = match[1].trim();
-      try {
-        // Replace const/let with var and wrap in IIFE to avoid redeclaration errors
-        let safeCode = code.replace(/\b(const|let)\s+/g, 'var ');
-        // Wrap multi-statement code or code with await in IIFE if not already wrapped
-        if ((safeCode.includes(';') || safeCode.includes('\n') || safeCode.includes('await ')) && !safeCode.startsWith('(function') && !safeCode.startsWith('(async')) {
-          var needsAsync = safeCode.includes('await ');
-          safeCode = (needsAsync ? '(async function(){' : '(function(){') + safeCode + '})()';
-        }
-        const res = await sendCdpCommand(tabId, 'Runtime.evaluate', {
-          expression: safeCode,
-          returnByValue: true,
-          awaitPromise: true,
-          generatePreview: true,
-        });
-        if (res.status === 'ok') {
-          const result = res.result;
-          if (result?.exceptionDetails) {
-            const display = 'Error: ' + (result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Unknown error');
-            results.push({ type: 'js_error', error: display });
-          } else {
-            const value = result?.result?.value;
-            const preview = result?.result?.preview;
-            const desc = result?.result?.description;
-            const type = result?.result?.type;
-            const subtype = result?.result?.subtype;
-            let display;
-            if (value !== undefined && value !== null) {
-              display = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-            } else if (preview) {
-              display = JSON.stringify(preview, null, 2);
-            } else if (desc) {
-              display = desc;
+            const res = await sendCdpCommand(targetTab, cmd.method, cmd.params || {});
+            if (res.status === 'ok') {
+              let displayResult = JSON.stringify(res.result, null, 2);
+              if (cmd.method === 'Page.captureScreenshot' && res.result?.data) {
+                displayResult = '{"screenshot": "captured", "size": ' + res.result.data.length + '}';
+              }
+              results.push({ type: 'cdp', method: cmd.method, result: (displayResult || '').substring(0, 5000) });
             } else {
-              display = '(' + (type || 'undefined') + (subtype ? ':' + subtype : '') + ')';
+              results.push({ type: 'cdp_error', method: cmd.method, error: res.error || 'Unknown error' });
             }
-            results.push({ type: 'js', result: display.substring(0, 5000) });
           }
-        } else {
-          results.push({ type: 'js_error', error: res.error || 'Unknown error' });
+        } catch (e) {
+          results.push({ type: 'cdp_error', method: rawCmd.substring(0, 50), error: e.message });
         }
-      } catch (e) {
-        results.push({ type: 'js_error', error: e.message });
-      }
-    }
-
-    // Match ```ext ... ``` blocks — extension-level commands (tab management, etc.)
-    const extRegex = /```ext\s*\n([\s\S]*?)```/g;
-    while ((match = extRegex.exec(responseText)) !== null) {
-      if (autoExecCancelled) return results;
-      const rawCmd = match[1].trim();
-      try {
-        const cmd = JSON.parse(rawCmd);
-        const res = await handleExtInAutoExec(cmd);
-        results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
-
-        if (res.tabId) {
-          tabId = res.tabId;
-          taskTabId = res.tabId;
-        }
-      } catch (e) {
-        results.push({ type: 'ext_error', action: rawCmd.substring(0, 50), error: e.message });
       }
     }
 
@@ -1768,7 +1724,7 @@
       if (r.type === 'ext') prompt += 'Extension ' + r.action + ' returned:\n' + r.result + '\n\n';
       if (r.type === 'ext_error') prompt += 'Extension ' + r.action + ' ERROR: ' + r.error + '\n\n';
     }
-    prompt += 'Based on these results, continue with the task. If the task is complete, summarize what was done. If more steps are needed, provide the next CDP/JS commands to execute. Remember: read DOM first (js/DOM.getDocument), use CDP Input for clicks, never use element.click() in SPAs.';
+    prompt += 'Continue.';
     return prompt;
   }
 
