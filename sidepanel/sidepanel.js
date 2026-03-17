@@ -823,6 +823,15 @@
     messagesEl.innerHTML = getWelcomeHTML();
     // Clear stored chat for this tab only
     if (currentTabId) tabChats.delete(currentTabId);
+    // Clear background task if it was for this tab
+    if (taskCtx && taskCtx.originTab === currentTabId) {
+      if (taskCtx.container) taskCtx.container.remove();
+      taskCtx = null;
+    }
+    // Reset task tab tracking
+    taskTabId = null;
+    isStreaming = false;
+    currentStreamText = '';
     // Clear pending attachments
     pendingAttachments = [];
     renderAttachments();
@@ -988,10 +997,10 @@
       pageHeader = '[Page: ' + pageCtx.url + ' | Title: ' + pageCtx.title + ' | Tab: ' + pageCtx.tabId + ']\n';
     }
 
-    // On first message of a session, auto-include all browser tabs so AI doesn't waste a step
-    const currentSessionId = taskCtx ? taskCtx.sessionId : chatSessionId;
+    // On first message of a session (no session for this tab), auto-include all browser tabs
+    const isFirstMessage = !(taskCtx ? taskCtx.sessionId : chatSessionId);
     let tabsContext = '';
-    if (!currentSessionId) {
+    if (isFirstMessage) {
       try {
         const allTabs = await new Promise(resolve => {
           chrome.tabs.query({}, tabs => resolve(tabs || []));
