@@ -1799,7 +1799,7 @@
       if (r.type === 'ext') prompt += 'Extension ' + r.action + ' returned:\n' + r.result + '\n\n';
       if (r.type === 'ext_error') prompt += 'Extension ' + r.action + ' ERROR: ' + r.error + '\n\n';
     }
-    prompt += 'Continue.';
+    prompt += 'Based on these results, continue with the task. If the task is complete, summarize what was done. If more steps are needed, provide the next CDP/JS commands to execute.';
     return prompt;
   }
 
