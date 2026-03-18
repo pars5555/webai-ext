@@ -172,8 +172,9 @@
     }
     let host = '';
     try { host = currentTabInfo.url ? new URL(currentTabInfo.url).hostname : ''; } catch (e) {}
-    indicator.textContent = host || currentTabInfo.title || 'No page';
-    indicator.title = currentTabInfo.url;
+    var sid = taskCtx ? taskCtx.sessionId : chatSessionId;
+    indicator.textContent = (host || currentTabInfo.title || 'No page') + (sid ? '  ·  ' + sid.slice(0, 8) : '');
+    indicator.title = (currentTabInfo.url || '') + (sid ? '\nSession: ' + sid : '');
 
     // Update bottom tab context label (under input)
     const tabContextLabel = document.getElementById('claude-tab-context-label');
