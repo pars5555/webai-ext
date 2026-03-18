@@ -800,24 +800,37 @@
     });
   }
 
-  // Collect rich page context via CDP (headings, links, forms, body text, cookies, storage)
+  // Collect rich page context via CDP — formatted tab descriptor with visible elements + bounding boxes
   async function collectRichPageContext(tabId) {
     const ctx = {};
     try {
-      // Body text + headings + forms + links count in one JS call
       const res = await sendCdpCommand(tabId, 'Runtime.evaluate', {
         expression: `(function(){
           var h = []; document.querySelectorAll('h1,h2,h3').forEach(function(e){ h.push(e.tagName + ': ' + e.textContent.trim().substring(0,80)); });
           var forms = document.querySelectorAll('form').length;
-          var inputs = []; document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(function(e){
+          // All visible interactive elements with bounding boxes and center coords
+          var els = []; document.querySelectorAll('a,button,input,textarea,select,[contenteditable="true"],[role="button"],[role="link"],[role="tab"],[role="menuitem"]').forEach(function(e){
             var r = e.getBoundingClientRect();
-            if(r.width > 0 && r.height > 0) inputs.push({tag: e.tagName, type: e.type||e.getAttribute('contenteditable'), id: e.id, name: e.name, placeholder: e.placeholder||e.getAttribute('data-placeholder')||'', x: Math.round(r.x+r.width/2), y: Math.round(r.y+r.height/2)});
+            if(r.width > 0 && r.height > 0 && r.top < window.innerHeight && r.bottom > 0) {
+              var text = (e.textContent || e.value || e.placeholder || e.getAttribute('aria-label') || e.getAttribute('data-testid') || '').trim().substring(0,60);
+              if(!text && e.title) text = e.title.substring(0,60);
+              els.push({
+                tag: e.tagName.toLowerCase(),
+                type: e.type || e.getAttribute('role') || e.getAttribute('contenteditable') || '',
+                id: e.id || '',
+                text: text,
+                cx: Math.round(r.x + r.width/2),
+                cy: Math.round(r.y + r.height/2),
+                w: Math.round(r.width),
+                h: Math.round(r.height)
+              });
+            }
           });
           var links = document.querySelectorAll('a').length;
           var imgs = document.querySelectorAll('img').length;
           var sel = window.getSelection().toString().substring(0,500);
-          var body = (document.body && document.body.innerText || '').substring(0, 4000);
-          return JSON.stringify({headings: h.slice(0,15), forms: forms, inputs: inputs.slice(0,15), links: links, images: imgs, selectedText: sel, bodyText: body});
+          var body = (document.body && document.body.innerText || '').substring(0, 3000);
+          return JSON.stringify({headings: h.slice(0,15), forms: forms, visibleElements: els.slice(0,40), links: links, images: imgs, selectedText: sel, bodyText: body});
         })()`,
         returnByValue: true, awaitPromise: false,
       });
