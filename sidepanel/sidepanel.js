@@ -1101,32 +1101,20 @@
     updateContextMeter();
   }
 
-  // Log execution results to server DB (non-blocking)
-  function logExecToServer(tabId, content, metadata) {
-    const isBackgroundTaskFollowUp = taskCtx && tabId === taskCtx.originTab;
-    const sid = (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId) || undefined;
-    fetch(SERVER_URL + '/api/chat/exec', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ sessionId: sid, tabId: tabId, content: content, metadata: metadata }),
-    }).catch(function() {}); // fire and forget
-  }
-
   // ---------------------------------------------------------------------------
   // Server SSE Chat — direct fetch to /api/chat with streaming
   // ---------------------------------------------------------------------------
-  async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext) {
+  async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isExec) {
     retryCount = retryCount || 0;
 
-    // Use taskCtx session only if this message is a follow-up from the background task
     const isBackgroundTaskFollowUp = taskCtx && tabId === taskCtx.originTab;
     const body = {
       message: userMessage,
       tabId: tabId,
       sessionId: (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId) || undefined,
     };
-    // Send page context on first message so server can embed it in system prompt
     if (pageContext) body.pageContext = pageContext;
+    if (isExec) body.isExec = true;
 
     const controller = new AbortController();
     currentAbortController = controller;
@@ -1547,24 +1535,15 @@
             }
           }
 
-          // Send results back to AI for next step
+          // Send results back to AI for next step (marked as exec, not user)
           const followUpPrompt = formatCdpResultsAsPrompt(cdpResults);
           curHist.push({ role: 'user', content: followUpPrompt });
-
-          // Log exec results to server DB
-          logExecToServer(execTabId, followUpPrompt, {
-            step: autoFollowUpCount,
-            aiMs: aiResponseMs,
-            execMs: execMs,
-            totalMs: stepTotalMs,
-            commandCount: cdpResults.length,
-          });
 
           isStreaming = true;
           if (taskCtx) taskCtx.isStreaming = true;
           updateSendButton();
           _stepSendTime = Date.now();
-          sendViaServerSSE(followUpPrompt, execTabId);
+          sendViaServerSSE(followUpPrompt, execTabId, 0, null, true);
         } else {
           // No CDP blocks — task is done
           finishTask();
