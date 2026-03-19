@@ -345,8 +345,12 @@
   // ---------------------------------------------------------------------------
   async function loadServerUrl() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['serverUrl'], (result) => {
-        if (result.serverUrl) SERVER_URL = result.serverUrl;
+      chrome.storage.sync.get(['serverUrl', 'devMode'], (result) => {
+        if (result.devMode) {
+          SERVER_URL = 'http://localhost:3466';
+        } else if (result.serverUrl) {
+          SERVER_URL = result.serverUrl;
+        }
         resolve(SERVER_URL);
       });
     });
@@ -368,12 +372,43 @@
     if (area === 'sync' && changes.serverUrl) {
       SERVER_URL = changes.serverUrl.newValue || 'https://webai.pc.am';
     }
+    if (area === 'sync' && changes.devMode) {
+      SERVER_URL = changes.devMode.newValue ? 'http://localhost:3466' : 'https://webai.pc.am';
+    }
   });
 
   async function initAuth() {
     loadTheme();
     await loadServerUrl();
-    // Load stored tokens
+
+    // Dev mode — auto-login via email/password, skip OAuth
+    const syncData = await storageGet(['devMode']);
+    if (syncData.devMode) {
+      try {
+        const res = await fetch(SERVER_URL + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'pars5555@yahoo.com', password: 'admin123' }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          authState.accessToken = data.accessToken;
+          authState.refreshToken = data.refreshToken;
+          authState.user = data.user;
+          authState.isAuthenticated = true;
+          await saveAuthState();
+          showChatUI();
+          return true;
+        }
+      } catch (e) {
+        console.warn('Dev auto-login failed:', e.message);
+      }
+      // Dev mode but login failed — show chat anyway
+      showChatUI();
+      return true;
+    }
+
+    // Normal auth flow
     return new Promise((resolve) => {
       chrome.storage.local.get(['authAccessToken', 'authRefreshToken', 'authUser'], async (result) => {
         if (result.authAccessToken) {
@@ -419,6 +454,12 @@
           resolve(true);
         }
       });
+    });
+  }
+
+  function storageGet(keys) {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(keys, (result) => resolve(result));
     });
   }
 

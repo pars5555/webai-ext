@@ -3,32 +3,23 @@
 (function () {
   'use strict';
 
-  // ─── Constants ───────────────────────────────────────────────
-
-  const DEFAULT_SERVER_URL = 'https://webai.pc.am';
-
   const DEFAULTS = {
     model: 'claude-opus-4-6',
     theme: 'dark',
+    devMode: false,
   };
-
-  // ─── DOM References ──────────────────────────────────────────
 
   const $ = (sel) => document.querySelector(sel);
 
   const elExtVersion = $('#ext-version');
-  const elServerUrl = $('#server-url-input');
+  const elDevMode = $('#dev-mode-toggle');
   const elModelSelect = $('#model-select');
   const elThemeSelect = $('#theme-select');
   const elResetAllBtn = $('#reset-all-btn');
   const elToast = $('#toast');
 
-  // ─── State ───────────────────────────────────────────────────
-
   let currentSettings = { ...DEFAULTS };
   let toastTimer = null;
-
-  // ─── Init ────────────────────────────────────────────────────
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -38,17 +29,13 @@
     bindEvents();
   }
 
-  // ─── Version ─────────────────────────────────────────────────
-
   function setVersion() {
     let version = '1.0.0';
     try {
       if (chrome && chrome.runtime && chrome.runtime.getManifest) {
         version = chrome.runtime.getManifest().version;
       }
-    } catch (e) {
-      // fallback
-    }
+    } catch (e) {}
     elExtVersion.textContent = version;
   }
 
@@ -75,9 +62,7 @@
 
   function sendMessage(msg) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(msg, (response) => {
-        resolve(response);
-      });
+      chrome.runtime.sendMessage(msg, (response) => resolve(response));
     });
   }
 
@@ -87,7 +72,7 @@
     try {
       const [settingsResult, storageResult] = await Promise.all([
         sendMessage({ type: 'GET_SETTINGS' }).catch(() => null),
-        storageGet(['model', 'theme', 'serverUrl']),
+        storageGet(['model', 'theme', 'devMode']),
       ]);
 
       if (settingsResult && settingsResult.model !== undefined) {
@@ -97,19 +82,19 @@
         currentSettings.model = storageResult.model || DEFAULTS.model;
         currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       }
-      currentSettings.serverUrl = storageResult.serverUrl || DEFAULT_SERVER_URL;
+      currentSettings.devMode = storageResult.devMode === true;
     } catch (e) {
-      const storageResult = await storageGet(['model', 'theme', 'serverUrl']);
+      const storageResult = await storageGet(['model', 'theme', 'devMode']);
       currentSettings.model = storageResult.model || DEFAULTS.model;
       currentSettings.theme = storageResult.theme || DEFAULTS.theme;
-      currentSettings.serverUrl = storageResult.serverUrl || DEFAULT_SERVER_URL;
+      currentSettings.devMode = storageResult.devMode === true;
     }
   }
 
   // ─── Render ──────────────────────────────────────────────────
 
   function renderSettings() {
-    elServerUrl.value = currentSettings.serverUrl;
+    elDevMode.checked = currentSettings.devMode;
     elModelSelect.value = currentSettings.model;
     elThemeSelect.value = currentSettings.theme;
     applyTheme(currentSettings.theme);
@@ -122,18 +107,11 @@
 
   // ─── Bind Events ─────────────────────────────────────────────
 
-  let serverUrlTimer = null;
-
   function bindEvents() {
-    elServerUrl.addEventListener('input', () => {
-      clearTimeout(serverUrlTimer);
-      serverUrlTimer = setTimeout(() => {
-        let url = elServerUrl.value.trim().replace(/\/+$/, '');
-        if (!url) url = DEFAULT_SERVER_URL;
-        currentSettings.serverUrl = url;
-        storageSet({ serverUrl: url });
-        showToast('Server URL updated to ' + url, 'success');
-      }, 600);
+    elDevMode.addEventListener('change', () => {
+      currentSettings.devMode = elDevMode.checked;
+      storageSet({ devMode: currentSettings.devMode });
+      showToast(currentSettings.devMode ? 'Dev mode ON — using localhost:3466' : 'Dev mode OFF — using production', 'success');
     });
 
     elModelSelect.addEventListener('change', () => {
@@ -171,17 +149,13 @@
   // ─── Reset All ───────────────────────────────────────────────
 
   async function resetAll() {
-    if (!confirm('Are you sure you want to reset ALL settings? This cannot be undone.')) {
-      return;
-    }
+    if (!confirm('Are you sure you want to reset ALL settings? This cannot be undone.')) return;
 
     try {
       await sendMessage({ type: 'RESET_ALL' }).catch(() => null);
       await storageClearAll();
-
-      currentSettings = { ...DEFAULTS, serverUrl: DEFAULT_SERVER_URL };
+      currentSettings = { ...DEFAULTS };
       renderSettings();
-
       showToast('All settings have been reset', 'success');
     } catch (e) {
       showToast('Failed to reset settings', 'error');
@@ -192,15 +166,10 @@
 
   function showToast(message, type) {
     clearTimeout(toastTimer);
-
     elToast.textContent = message;
     elToast.className = 'toast ' + type;
-
     void elToast.offsetWidth;
     elToast.classList.add('visible');
-
-    toastTimer = setTimeout(() => {
-      elToast.classList.remove('visible');
-    }, 3000);
+    toastTimer = setTimeout(() => { elToast.classList.remove('visible'); }, 3000);
   }
 })();
