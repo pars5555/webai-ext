@@ -366,7 +366,7 @@
       if (changes.theme.newValue === 'light') document.body.classList.add('light');
     }
     if (area === 'sync' && changes.devMode) {
-      SERVER_URL = changes.devMode.newValue ? 'http://localhost:3466' : 'https://webai.pc.am';
+      window.location.reload();
     }
   });
 
