@@ -374,6 +374,9 @@
     loadTheme();
     await loadServerUrl();
 
+    // Clear stale auth from other mode
+    await clearAuthState();
+
     // Dev mode — auto-login via email/password, skip OAuth
     const syncData = await storageGet(['devMode']);
     if (syncData.devMode) {
@@ -477,7 +480,9 @@
     authState.refreshToken = null;
     authState.user = null;
     authState.isAuthenticated = false;
-    chrome.storage.local.remove(['authAccessToken', 'authRefreshToken', 'authUser']);
+    return new Promise((resolve) => {
+      chrome.storage.local.remove(['authAccessToken', 'authRefreshToken', 'authUser'], resolve);
+    });
   }
 
   // ---------------------------------------------------------------------------
