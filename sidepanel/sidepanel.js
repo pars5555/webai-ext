@@ -220,13 +220,26 @@
     return div.innerHTML;
   }
 
+  // Auto-scroll: enabled by default, disabled when user scrolls up, re-enabled when user scrolls to bottom
+  let _autoScroll = true;
+
   function scrollToBottom() {
+    if (!_autoScroll) return;
     requestAnimationFrame(() => {
       if (messagesEl) {
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
     });
   }
+
+  // Detect manual scroll
+  (function() {
+    if (!messagesEl) return;
+    messagesEl.addEventListener('scroll', function() {
+      var atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 40;
+      _autoScroll = atBottom;
+    });
+  })();
 
   // Clipboard helper — works in extension side panel context
   function copyToClipboard(text) {
