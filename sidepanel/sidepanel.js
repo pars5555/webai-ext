@@ -365,7 +365,7 @@
       document.body.classList.remove('light');
       if (changes.theme.newValue === 'light') document.body.classList.add('light');
     }
-    if (area === 'sync' && changes.devMode) {
+    if (area === 'sync' && (changes.devMode || changes.devUser)) {
       window.location.reload();
     }
   });

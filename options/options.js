@@ -74,7 +74,7 @@
     try {
       const [settingsResult, storageResult] = await Promise.all([
         sendMessage({ type: 'GET_SETTINGS' }).catch(() => null),
-        storageGet(['model', 'theme', 'devMode']),
+        storageGet(['model', 'theme', 'devMode', 'devUser']),
       ]);
 
       if (settingsResult && settingsResult.model !== undefined) {
