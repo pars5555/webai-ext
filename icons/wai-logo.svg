@@ -1,5 +1,9 @@
 <svg viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
   <circle cx="15" cy="15" r="13.5" fill="none" stroke="white" stroke-width="1.5"/>
-  <path d="M 4,14 Q 5.5,23 7.5,14 Q 9.5,5 11.5,14 Q 13,21 15.5,6 Q 17,1 19,14 Q 20,20 20.5,21 L 18,14 L 13.5,14 Q 17,14 22,14 L 24,7"
-    fill="none" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- w (white) — ends at (11,20) where A begins -->
+  <path d="M 4.5,11 L 6.5,20 L 9,11 L 11,20"
+    fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- AI (purple) — starts at (11,20), A peak, right leg, loops crossbar, exits into I -->
+  <path d="M 11,20 L 15.5,6 L 20,20 L 18,14 L 13.5,14 L 23,14 L 23,7"
+    fill="none" stroke="#c4b5fd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
