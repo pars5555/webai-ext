@@ -232,14 +232,7 @@
     });
   }
 
-  // Detect manual scroll
-  (function() {
-    if (!messagesEl) return;
-    messagesEl.addEventListener('scroll', function() {
-      var atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 40;
-      _autoScroll = atBottom;
-    });
-  })();
+  // Detect manual scroll — initialized after messagesEl is defined (see below)
 
   // Clipboard helper — works in extension side panel context
   function copyToClipboard(text) {
@@ -298,6 +291,12 @@
 
   // Show welcome
   messagesEl.innerHTML = getWelcomeHTML();
+
+  // Init auto-scroll listener (must be after messagesEl is defined)
+  messagesEl.addEventListener('scroll', function() {
+    var atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 40;
+    _autoScroll = atBottom;
+  });
 
   // Auth overlay elements
   const authOverlay = document.getElementById('claude-auth-overlay');
