@@ -378,13 +378,16 @@
     await clearAuthState();
 
     // Dev mode — auto-login via email/password, skip OAuth
-    const syncData = await storageGet(['devMode']);
+    const syncData = await storageGet(['devMode', 'devUser']);
     if (syncData.devMode) {
+      const userParts = (syncData.devUser || 'pars5555@yahoo.com|admin123').split('|');
+      const devEmail = userParts[0];
+      const devPassword = userParts[1];
       try {
         const res = await fetch(SERVER_URL + '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: 'pars5555@yahoo.com', password: 'admin123' }),
+          body: JSON.stringify({ email: devEmail, password: devPassword }),
         });
         if (res.ok) {
           const data = await res.json();

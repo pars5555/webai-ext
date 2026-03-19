@@ -13,6 +13,8 @@
 
   const elExtVersion = $('#ext-version');
   const elDevMode = $('#dev-mode-toggle');
+  const elDevUserGroup = $('#dev-user-group');
+  const elDevUserSelect = $('#dev-user-select');
   const elModelSelect = $('#model-select');
   const elThemeSelect = $('#theme-select');
   const elResetAllBtn = $('#reset-all-btn');
@@ -83,11 +85,13 @@
         currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       }
       currentSettings.devMode = storageResult.devMode === true;
+      currentSettings.devUser = storageResult.devUser || 'pars5555@yahoo.com|admin123';
     } catch (e) {
-      const storageResult = await storageGet(['model', 'theme', 'devMode']);
+      const storageResult = await storageGet(['model', 'theme', 'devMode', 'devUser']);
       currentSettings.model = storageResult.model || DEFAULTS.model;
       currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       currentSettings.devMode = storageResult.devMode === true;
+      currentSettings.devUser = storageResult.devUser || 'pars5555@yahoo.com|admin123';
     }
   }
 
@@ -95,6 +99,8 @@
 
   function renderSettings() {
     elDevMode.checked = currentSettings.devMode;
+    elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
+    elDevUserSelect.value = currentSettings.devUser;
     elModelSelect.value = currentSettings.model;
     elThemeSelect.value = currentSettings.theme;
     applyTheme(currentSettings.theme);
@@ -110,8 +116,15 @@
   function bindEvents() {
     elDevMode.addEventListener('change', () => {
       currentSettings.devMode = elDevMode.checked;
+      elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
       storageSet({ devMode: currentSettings.devMode });
       showToast(currentSettings.devMode ? 'Dev mode ON — using localhost:3466' : 'Dev mode OFF — using production', 'success');
+    });
+
+    elDevUserSelect.addEventListener('change', () => {
+      currentSettings.devUser = elDevUserSelect.value;
+      storageSet({ devUser: currentSettings.devUser });
+      showToast('Dev user changed — reload sidepanel to apply', 'success');
     });
 
     elModelSelect.addEventListener('change', () => {
