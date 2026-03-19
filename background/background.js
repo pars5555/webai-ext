@@ -2,7 +2,6 @@
 // Handles: CDP, cookies, network log, per-page toggle, OAuth
 
 const MODEL = 'claude-opus-4-6';
-const MAX_TOKENS = 4096;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -148,25 +147,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleGetPageSources(tabId, sendResponse);
       return true;
 
-    case 'GET_PAGE_ENABLED':
-      handleGetPageEnabled(message, sendResponse);
-      return true;
-
-    case 'SET_PAGE_ENABLED':
-      handleSetPageEnabled(message, sendResponse);
-      return true;
-
     case 'OPEN_OPTIONS_PAGE':
       chrome.runtime.openOptionsPage();
       sendResponse({ status: 'ok' });
       return true;
 
     case 'GET_SETTINGS':
-      chrome.storage.sync.get(['model', 'maxTokens', 'autoAttachCdp', 'theme'], (result) => {
+      chrome.storage.sync.get(['model', 'theme'], (result) => {
         sendResponse({
           model: result.model || MODEL,
-          maxTokens: result.maxTokens || MAX_TOKENS,
-          autoAttachCdp: result.autoAttachCdp || false,
           theme: result.theme || 'dark',
         });
       });
@@ -175,26 +164,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'SET_SETTINGS': {
       const settings = {};
       if (message.model !== undefined) settings.model = message.model;
-      if (message.maxTokens !== undefined) settings.maxTokens = message.maxTokens;
-      if (message.autoAttachCdp !== undefined) settings.autoAttachCdp = message.autoAttachCdp;
       if (message.theme !== undefined) settings.theme = message.theme;
       chrome.storage.sync.set(settings, () => {
         sendResponse({ status: 'saved' });
       });
       return true;
     }
-
-    case 'GET_DISABLED_URLS':
-      chrome.storage.local.get(['disabledUrls'], (result) => {
-        sendResponse({ disabledUrls: result.disabledUrls || [] });
-      });
-      return true;
-
-    case 'SET_DISABLED_URLS':
-      chrome.storage.local.set({ disabledUrls: message.disabledUrls || [] }, () => {
-        sendResponse({ status: 'saved' });
-      });
-      return true;
 
     case 'GET_EXTENSION_LOGS':
       sendResponse({ logs: getRecentLogs(message.count || 50) });
@@ -441,37 +416,6 @@ async function handleGetPageSources(tabId, sendResponse) {
       }
     }
     sendResponse({ status: 'ok', resources });
-  } catch (error) {
-    sendResponse({ status: 'error', error: error.message });
-  }
-}
-
-// ─── Per-Page Toggle ──────────────────────────────────────────────────────────
-
-async function handleGetPageEnabled(message, sendResponse) {
-  if (!message.url) { sendResponse({ status: 'ok', enabled: true }); return; }
-  try {
-    const hostname = new URL(message.url).hostname;
-    const result = await chrome.storage.local.get(['disabledUrls']);
-    sendResponse({ status: 'ok', enabled: !(result.disabledUrls || []).includes(hostname) });
-  } catch (error) {
-    sendResponse({ status: 'error', error: error.message });
-  }
-}
-
-async function handleSetPageEnabled(message, sendResponse) {
-  if (!message.url) { sendResponse({ status: 'error', error: 'No URL' }); return; }
-  try {
-    const hostname = new URL(message.url).hostname;
-    const result = await chrome.storage.local.get(['disabledUrls']);
-    let disabledUrls = result.disabledUrls || [];
-    if (message.enabled) {
-      disabledUrls = disabledUrls.filter(h => h !== hostname);
-    } else if (!disabledUrls.includes(hostname)) {
-      disabledUrls.push(hostname);
-    }
-    await chrome.storage.local.set({ disabledUrls });
-    sendResponse({ status: 'ok', enabled: message.enabled });
   } catch (error) {
     sendResponse({ status: 'error', error: error.message });
   }

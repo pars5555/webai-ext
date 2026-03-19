@@ -43,61 +43,12 @@
       </div>
 
       <div class="field-group">
-        <label for="max-tokens-slider">
-          Max Tokens: <span class="slider-value" id="max-tokens-value">4096</span>
-        </label>
-        <input type="range" id="max-tokens-slider" min="1024" max="8192" step="256" value="4096">
-        <div class="slider-labels">
-          <span>1024</span>
-          <span>8192</span>
-        </div>
-      </div>
-
-      <div class="field-group">
         <label>Theme</label>
         <select id="theme-select">
           <option value="dark">Dark (Default)</option>
           <option value="light" disabled>Light (Coming Soon)</option>
         </select>
       </div>
-
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <span class="toggle-label">Auto-attach CDP</span>
-          <span class="toggle-desc">Automatically attach Chrome DevTools Protocol debugger when chat opens</span>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="auto-attach-cdp">
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-    </section>
-
-    <!-- Per-Page Settings -->
-    <section class="card">
-      <h2 class="card-title">
-        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-        Per-Page Settings
-      </h2>
-      <p class="card-description">Disable the extension on specific hostnames. The chat bubble will not appear on these sites.</p>
-
-      <div class="field-group">
-        <label for="hostname-input">Add Hostname</label>
-        <div class="input-row">
-          <input type="text" id="hostname-input" placeholder="example.com" spellcheck="false">
-          <button class="btn btn-primary" id="add-hostname-btn">Add</button>
-        </div>
-      </div>
-
-      <div id="hostname-list" class="hostname-list">
-        <!-- Rendered dynamically -->
-      </div>
-
-      <div id="hostname-empty" class="hostname-empty">
-        No disabled hostnames. The extension is active on all sites.
-      </div>
-
-      <button class="btn btn-outline btn-danger btn-sm hidden" id="clear-hostnames-btn">Clear All Disabled Hostnames</button>
     </section>
 
     <!-- Danger Zone -->
