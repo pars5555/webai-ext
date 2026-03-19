@@ -345,12 +345,8 @@
   // ---------------------------------------------------------------------------
   async function loadServerUrl() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['serverUrl', 'devMode'], (result) => {
-        if (result.devMode) {
-          SERVER_URL = 'http://localhost:3466';
-        } else if (result.serverUrl) {
-          SERVER_URL = result.serverUrl;
-        }
+      chrome.storage.sync.get(['devMode'], (result) => {
+        if (result.devMode) SERVER_URL = 'http://localhost:3466';
         resolve(SERVER_URL);
       });
     });
@@ -368,9 +364,6 @@
     if (area === 'sync' && changes.theme) {
       document.body.classList.remove('light');
       if (changes.theme.newValue === 'light') document.body.classList.add('light');
-    }
-    if (area === 'sync' && changes.serverUrl) {
-      SERVER_URL = changes.serverUrl.newValue || 'https://webai.pc.am';
     }
     if (area === 'sync' && changes.devMode) {
       SERVER_URL = changes.devMode.newValue ? 'http://localhost:3466' : 'https://webai.pc.am';
