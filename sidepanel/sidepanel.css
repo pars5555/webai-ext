@@ -132,20 +132,20 @@ body {
 }
 
 .claude-messages::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
 }
 
 .claude-messages::-webkit-scrollbar-track {
-  background: transparent;
+  background: #1a1a2e;
 }
 
 .claude-messages::-webkit-scrollbar-thumb {
-  background: rgba(124, 58, 237, 0.3);
-  border-radius: 3px;
+  background: #555;
+  border-radius: 5px;
 }
 
 .claude-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(124, 58, 237, 0.5);
+  background: #888;
 }
 
 /* ========================================================================
