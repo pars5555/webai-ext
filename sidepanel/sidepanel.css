@@ -41,13 +41,6 @@ body {
 }
 
 .claude-panel-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #7C3AED, #6D28D9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
 

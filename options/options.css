@@ -40,21 +40,13 @@ body {
 }
 
 .header-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #7C3AED, #6D28D9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
 }
 
 .header-logo img {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
 }
 
 .options-header h1 {
