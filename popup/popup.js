@@ -1,5 +1,10 @@
 // popup.js — AI Web Assistant popup script
 
+// Load theme
+chrome.storage.sync.get(['theme'], (result) => {
+  if (result.theme === 'light') document.body.classList.add('light');
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   const statusDot = document.getElementById('status-dot');
   const statusText = document.getElementById('status-text');
