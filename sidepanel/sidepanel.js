@@ -267,7 +267,7 @@
   function getWelcomeHTML() {
     return `
       <div class="claude-welcome">
-        <div class="claude-welcome-icon"><img src="../icons/icon128.png" width="32" height="32" alt="WebAI"></div>
+        <div class="claude-welcome-icon"><img src="../icons/wai-logo-text.svg" width="48" height="48" alt="wAi"></div>
         <h3>AI Web Assistant</h3>
         <p>Ask anything — Claude has full access to this page.</p>
       </div>`;

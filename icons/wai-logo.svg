@@ -1,8 +1,0 @@
-<svg viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
-  <!-- Text version: circle outline, w white, AI purple -->
-  <circle cx="15" cy="15" r="13.5" fill="none" stroke="white" stroke-width="1.8"/>
-  <text x="15" y="18" text-anchor="middle" font-size="11" font-weight="700"
-    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-    <tspan fill="white">w</tspan><tspan fill="#c4b5fd">AI</tspan>
-  </text>
-</svg>

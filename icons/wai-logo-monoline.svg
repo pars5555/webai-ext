@@ -1,6 +1,25 @@
 <svg viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
-  <!-- Monoline version: purple filled circle, white single-stroke wAI -->
-  <circle cx="15" cy="15" r="13.5" fill="#7C3AED" stroke="none"/>
-  <path d="M 4.5,11 L 6.5,20 L 9,11 L 11,20 L 15.5,6 L 20,20 L 18,14 L 13.5,14 L 23,14 L 23,5 L 23,14 L 23,23"
-    fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="45%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+    <linearGradient id="wGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#DDD6FE"/>
+    </linearGradient>
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+  <!-- Gradient circle matching icon.svg -->
+  <circle cx="15" cy="15" r="13.5" fill="url(#bg)" stroke="none"/>
+  <!-- w (white→light purple gradient) -->
+  <path d="M 3.5,13 L 5.5,22 L 8,13 L 10,22"
+    fill="none" stroke="url(#wGrad)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- AI (purple gradient) -->
+  <path d="M 10,22 L 14,8 L 18,22 L 16.5,16 L 12,16 L 22.5,16 L 22.5,8 L 20.5,8 L 24.5,8 L 22.5,8 L 22.5,22 L 20.5,22 L 24.5,22"
+    fill="none" stroke="url(#aiGrad)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
