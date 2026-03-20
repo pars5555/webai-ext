@@ -59,6 +59,15 @@
     const tabChanged = oldTabId !== null && oldTabId !== tab.id;
 
     if (tabChanged) {
+      // During auto-exec, tab switches (e.g. AI's switchTab command) should not
+      // swap sessions or UI — just update currentTabId for CDP targeting
+      if (isStreaming || taskTabId) {
+        currentTabId = tab.id;
+        currentTabInfo = { url: tab.url || '', title: tab.title || '' };
+        updateTabIndicator();
+        return;
+      }
+
       // Check if switching back to the background task's origin tab
       if (taskCtx && tab.id === taskCtx.originTab) {
         // Save the tab we're leaving
