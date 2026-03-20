@@ -1222,10 +1222,15 @@
     retryCount = retryCount || 0;
 
     const isBackgroundTaskFollowUp = taskCtx && tabId === taskCtx.originTab;
+    // For exec follow-ups, always use the current chatSessionId (don't break on tab switch)
+    const sessionForRequest = isExec
+      ? (chatSessionId || (taskCtx ? taskCtx.sessionId : null))
+      : (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId);
+
     const body = {
       message: userMessage,
       tabId: tabId,
-      sessionId: (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId) || undefined,
+      sessionId: sessionForRequest || undefined,
     };
     if (pageContext) body.pageContext = pageContext;
     if (isExec) body.isExec = true;
