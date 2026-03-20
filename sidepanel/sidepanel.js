@@ -59,15 +59,6 @@
     const tabChanged = oldTabId !== null && oldTabId !== tab.id;
 
     if (tabChanged) {
-      // During auto-exec, tab switches (e.g. AI's switchTab command) should not
-      // swap sessions or UI — just update currentTabId for CDP targeting
-      if (isStreaming || taskTabId) {
-        currentTabId = tab.id;
-        currentTabInfo = { url: tab.url || '', title: tab.title || '' };
-        updateTabIndicator();
-        return;
-      }
-
       // Check if switching back to the background task's origin tab
       if (taskCtx && tab.id === taskCtx.originTab) {
         // Save the tab we're leaving
@@ -1227,14 +1218,13 @@
   // ---------------------------------------------------------------------------
   // Server SSE Chat — direct fetch to /api/chat with streaming
   // ---------------------------------------------------------------------------
-  async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isExec) {
+  async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isExec, lockedSessionId) {
     retryCount = retryCount || 0;
 
     const isBackgroundTaskFollowUp = taskCtx && tabId === taskCtx.originTab;
-    // For exec follow-ups, always use the current chatSessionId (don't break on tab switch)
-    const sessionForRequest = isExec
-      ? (chatSessionId || (taskCtx ? taskCtx.sessionId : null))
-      : (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId);
+    // lockedSessionId: captured at auto-exec start, survives tab switches
+    const sessionForRequest = lockedSessionId
+      || (isBackgroundTaskFollowUp ? taskCtx.sessionId : chatSessionId);
 
     const body = {
       message: userMessage,
@@ -1631,6 +1621,8 @@
     // Auto-execute CDP/JS commands from AI response
     // Use taskTabId (locked at submission time) so tab switches don't break the loop
     const execTabId = taskTabId || currentTabId;
+    // Lock the session ID so tab switches during auto-exec don't lose it
+    const execSessionId = chatSessionId || (taskCtx ? taskCtx.sessionId : null);
     // Profiling: AI response time = time from SSE send to stream end
     const aiResponseMs = _stepSendTime ? (Date.now() - _stepSendTime) : 0;
 
@@ -1676,7 +1668,7 @@
           if (taskCtx) taskCtx.isStreaming = true;
           updateSendButton();
           _stepSendTime = Date.now();
-          sendViaServerSSE(followUpPrompt, execTabId, 0, null, true);
+          sendViaServerSSE(followUpPrompt, execTabId, 0, null, true, execSessionId);
         } else {
           // No CDP blocks — task is done
           finishTask();
