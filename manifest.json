@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI Web Assistant",
-  "version": "1.1.0",
-  "description": "Chrome extension with AI-powered page analysis and debugging.",
+  "version": "1.2.0",
+  "description": "AI-powered browser assistant with Claude and Gemini. Automate web tasks, analyze pages, and interact with any website using natural language.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,14 +11,7 @@
     "debugger",
     "cookies",
     "webRequest",
-    "webNavigation",
     "alarms",
-    "downloads",
-    "browsingData",
-    "history",
-    "bookmarks",
-    "topSites",
-    "notifications",
     "sidePanel",
     "identity"
   ],
