@@ -4,6 +4,31 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
+  // Custom confirm dialog (replaces window.confirm which fails in some browsers)
+  // ---------------------------------------------------------------------------
+  function showConfirm(message) {
+    return new Promise(function (resolve) {
+      var overlay = document.getElementById('confirm-overlay');
+      var msgEl = document.getElementById('confirm-message');
+      var okBtn = document.getElementById('confirm-ok');
+      var cancelBtn = document.getElementById('confirm-cancel');
+      if (!overlay) { resolve(confirm(message)); return; }
+      msgEl.textContent = message;
+      overlay.style.display = 'flex';
+      function cleanup(result) {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
   let isStreaming = false;
@@ -162,6 +187,8 @@
       currentStreamText = '';
       pendingAttachments = [];
       renderAttachments();
+      inputEl.disabled = false;
+      inputEl.placeholder = 'Message...';
       // Restore default model for new chats
       chrome.storage.sync.get(['model'], (result) => {
         if (result.model && modelSelect) {
@@ -189,6 +216,27 @@
       if (session.model && modelSelect) {
         modelSelect.value = session.model;
         _prevModel = session.model;
+      }
+      // Check if session belongs to a different tab — disable input
+      var isOtherTab = session.tabId && session.tabId !== currentTabId;
+      var disabledBanner = session.el.querySelector('.session-disabled-banner');
+      if (isOtherTab) {
+        inputEl.disabled = true;
+        inputEl.placeholder = 'Switch to the original tab to continue this chat';
+        if (!disabledBanner) {
+          var banner = document.createElement('div');
+          banner.className = 'session-disabled-banner';
+          banner.style.cssText = 'padding:8px 12px;background:rgba(251,191,36,0.1);border-bottom:1px solid rgba(251,191,36,0.2);font-size:12px;color:#fbbf24;text-align:center;cursor:pointer;';
+          banner.textContent = 'This chat is on another tab. Click to switch.';
+          banner.addEventListener('click', function() {
+            chrome.tabs.update(session.tabId, { active: true });
+          });
+          session.el.insertBefore(banner, session.el.firstChild);
+        }
+      } else {
+        inputEl.disabled = false;
+        inputEl.placeholder = 'Message...';
+        if (disabledBanner) disabledBanner.remove();
       }
     }
 
@@ -232,15 +280,23 @@
     }
   }
 
-  function updateSessionSelector() {
+  async function updateSessionSelector() {
     if (!sessionSelect) return;
     // Clear all except the "New Chat" option
     while (sessionSelect.options.length > 1) {
       sessionSelect.options[1].remove();
     }
-    // Add all sessions
+    // Get all open tab IDs
+    var openTabIds = new Set();
+    try {
+      var tabs = await chrome.tabs.query({ currentWindow: true });
+      tabs.forEach(function(t) { openTabIds.add(t.id); });
+    } catch (e) { /* fallback: show all */ openTabIds = null; }
+    // Add only sessions whose tab is still open (or has no tab — current session)
     for (const [sid, s] of sessions) {
-      addSessionToSelector(sid, s.title);
+      if (!openTabIds || !s.tabId || openTabIds.has(s.tabId)) {
+        addSessionToSelector(sid, s.title);
+      }
     }
     sessionSelect.value = activeSessionId || '';
   }
@@ -424,7 +480,8 @@
     const hasActiveChat = activeSessionId;
 
     if (hasActiveChat) {
-      if (!confirm('Changing model will end the current chat on this tab. Continue?')) {
+      var confirmed = await showConfirm('Changing model will end the current chat on this tab. Continue?');
+      if (!confirmed) {
         modelSelect.value = _prevModel;
         return;
       }
@@ -445,11 +502,28 @@
   });
 
   // Session selector — switch between chat sessions
-  sessionSelect.addEventListener('change', () => {
+  sessionSelect.addEventListener('change', async () => {
     const selectedId = sessionSelect.value;
     if (selectedId === '') {
       // "New Chat" selected
       switchToSession(null);
+      return;
+    }
+
+    const session = sessions.get(selectedId);
+    if (session && session.tabId && session.tabId !== currentTabId) {
+      // Check if the tab still exists
+      try {
+        await chrome.tabs.get(session.tabId);
+        // Tab exists — show read-only
+        switchToSession(selectedId);
+      } catch (e) {
+        // Tab closed — open new tab and assign session to it
+        const newTab = await chrome.tabs.create({ active: true });
+        session.tabId = newTab.id;
+        currentTabId = newTab.id;
+        switchToSession(selectedId);
+      }
     } else {
       switchToSession(selectedId);
     }
@@ -486,7 +560,6 @@
   async function initAuth() {
     loadTheme();
     await loadServerUrl();
-    await clearAuthState();
 
     const syncData = await storageGet(['devMode', 'devUser']);
     if (syncData.devMode) {
@@ -674,7 +747,7 @@
     updateUserBadge();
     syncModelFromServer();
     pingServer();
-    loadUserSessions(); // Load active sessions from server
+    // Session selector only shows sessions from current browser tabs
   }
 
   const userBalanceEl = document.getElementById('claude-user-balance');
@@ -690,7 +763,7 @@
       if (authState.isAuthenticated) {
         userBadge.style.display = 'flex';
         if (authState.user) {
-          userBadgeText.textContent = authState.user.email || authState.user.displayName || 'User';
+          userBadgeText.textContent = authState.user.displayName || authState.user.email?.split('@')[0] || 'User';
           fetchBalance();
         } else {
           userBadgeText.textContent = 'Signed in';
@@ -739,11 +812,23 @@
   document.getElementById('claude-oauth-apple')?.addEventListener('click', () => handleOAuth('apple'));
   document.getElementById('claude-oauth-github')?.addEventListener('click', () => handleOAuth('github'));
 
-  userBadge?.addEventListener('click', () => {
-    chrome.storage.sync.get(['devMode'], (result) => {
-      if (result.devMode) return;
-      if (confirm('Sign out?')) logout();
-    });
+  // User menu toggle
+  var userMenu = document.getElementById('claude-user-menu');
+  userBadge?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!userMenu) return;
+    var isOpen = userMenu.style.display === 'block';
+    userMenu.style.display = isOpen ? 'none' : 'block';
+    // Set email in menu
+    var menuEmail = document.getElementById('claude-user-menu-email');
+    if (menuEmail && authState.user) menuEmail.textContent = authState.user.email || '';
+  });
+  // Close menu on outside click
+  document.addEventListener('click', () => { if (userMenu) userMenu.style.display = 'none'; });
+  // Sign out
+  document.getElementById('claude-user-menu-logout')?.addEventListener('click', () => {
+    userMenu.style.display = 'none';
+    showConfirm('Sign out?').then(function(ok) { if (ok) logout(); });
   });
 
   // Init auth on load
