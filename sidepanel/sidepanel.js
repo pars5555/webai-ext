@@ -799,9 +799,36 @@
         if (userBalanceEl) {
           userBalanceEl.textContent = '$' + (data.balanceUsd || 0).toFixed(2);
           userBalanceEl.style.display = 'inline-block';
+          userBalanceEl.style.cursor = 'pointer';
+          userBalanceEl.title = 'Click to add balance';
         }
       }
     } catch (e) { /* silent */ }
+  }
+
+  // Top-up: click balance to add funds
+  if (userBalanceEl) {
+    userBalanceEl.addEventListener('click', async () => {
+      var amount = prompt('Enter amount in USD to add (e.g. 5, 10, 25):');
+      if (!amount) return;
+      amount = parseFloat(amount);
+      if (isNaN(amount) || amount < 1 || amount > 1000) { alert('Amount must be between $1 and $1000'); return; }
+      try {
+        var res = await fetch(SERVER_URL + '/api/billing/create-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authState.accessToken },
+          body: JSON.stringify({ amountUsd: amount }),
+        });
+        var data = await res.json();
+        if (data.invoiceUrl) {
+          window.open(data.invoiceUrl, '_blank');
+        } else {
+          alert(data.error || 'Failed to create payment');
+        }
+      } catch (e) {
+        alert('Payment error: ' + e.message);
+      }
+    });
   }
 
   function showAuthError(msg) {
