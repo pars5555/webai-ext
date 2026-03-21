@@ -148,7 +148,10 @@
   <!-- Custom confirm dialog -->
   <div id="confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:none;align-items:center;justify-content:center;">
     <div style="background:var(--bg-secondary,#1e1e2e);border:1px solid var(--border-color,#333);border-radius:12px;padding:20px;max-width:320px;width:90%;text-align:center;">
-      <p id="confirm-message" style="margin:0 0 16px;color:#e0e0e0;font-size:14px;"></p>
+      <p id="confirm-message" style="margin:0 0 12px;color:#e0e0e0;font-size:14px;"></p>
+      <div id="confirm-input-wrap" style="display:none;margin-bottom:12px;">
+        <input id="confirm-input" type="text" style="width:100%;padding:8px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-size:14px;outline:none;">
+      </div>
       <div style="display:flex;gap:10px;justify-content:center;">
         <button id="confirm-cancel" style="padding:8px 20px;border-radius:8px;border:1px solid #555;background:transparent;color:#ccc;cursor:pointer;font-size:13px;">Cancel</button>
         <button id="confirm-ok" style="padding:8px 20px;border-radius:8px;border:none;background:#7c3aed;color:#fff;cursor:pointer;font-size:13px;">Continue</button>

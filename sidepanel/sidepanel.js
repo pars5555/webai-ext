@@ -6,27 +6,40 @@
   // ---------------------------------------------------------------------------
   // Custom confirm dialog (replaces window.confirm which fails in some browsers)
   // ---------------------------------------------------------------------------
-  function showConfirm(message) {
+  function _showDialog(message, opts) {
     return new Promise(function (resolve) {
       var overlay = document.getElementById('confirm-overlay');
       var msgEl = document.getElementById('confirm-message');
       var okBtn = document.getElementById('confirm-ok');
       var cancelBtn = document.getElementById('confirm-cancel');
-      if (!overlay) { resolve(confirm(message)); return; }
+      var inputWrap = document.getElementById('confirm-input-wrap');
+      var inputEl = document.getElementById('confirm-input');
+      if (!overlay) { resolve(opts.input ? prompt(message) : opts.alert ? (alert(message), true) : confirm(message)); return; }
       msgEl.textContent = message;
+      // Show/hide input
+      if (inputWrap) inputWrap.style.display = opts.input ? '' : 'none';
+      if (inputEl) inputEl.value = opts.defaultValue || '';
+      // Show/hide cancel
+      cancelBtn.style.display = opts.alert ? 'none' : '';
+      okBtn.textContent = opts.okText || 'OK';
       overlay.style.display = 'flex';
+      if (opts.input && inputEl) inputEl.focus();
       function cleanup(result) {
         overlay.style.display = 'none';
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         resolve(result);
       }
-      function onOk() { cleanup(true); }
-      function onCancel() { cleanup(false); }
+      function onOk() { cleanup(opts.input ? (inputEl ? inputEl.value : '') : true); }
+      function onCancel() { cleanup(opts.input ? null : false); }
       okBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
+      if (opts.input && inputEl) { inputEl.addEventListener('keydown', function handler(e) { if (e.key === 'Enter') { inputEl.removeEventListener('keydown', handler); onOk(); } }); }
     });
   }
+  function showConfirm(message) { return _showDialog(message, {}); }
+  function showPrompt(message, defaultValue) { return _showDialog(message, { input: true, defaultValue: defaultValue }); }
+  function showAlert(message) { return _showDialog(message, { alert: true }); }
 
   // ---------------------------------------------------------------------------
   // State
@@ -809,10 +822,10 @@
   // Top-up: click balance to add funds
   if (userBalanceEl) {
     userBalanceEl.addEventListener('click', async () => {
-      var amount = prompt('Enter amount in USD to add (e.g. 5, 10, 25):');
+      var amount = await showPrompt('Enter amount in USD to add (e.g. 5, 10, 25):', '10');
       if (!amount) return;
       amount = parseFloat(amount);
-      if (isNaN(amount) || amount < 1 || amount > 1000) { alert('Amount must be between $1 and $1000'); return; }
+      if (isNaN(amount) || amount < 1 || amount > 1000) { showAlert('Amount must be between $1 and $1000'); return; }
       try {
         var res = await fetch(SERVER_URL + '/api/billing/create-payment', {
           method: 'POST',
@@ -823,10 +836,10 @@
         if (data.invoiceUrl) {
           window.open(data.invoiceUrl, '_blank');
         } else {
-          alert(data.error || 'Failed to create payment');
+          showAlert(data.error || 'Failed to create payment');
         }
       } catch (e) {
-        alert('Payment error: ' + e.message);
+        showAlert('Payment error: ' + e.message);
       }
     });
   }
