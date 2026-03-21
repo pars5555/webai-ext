@@ -177,13 +177,13 @@
         currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       }
       currentSettings.devMode = storageResult.devMode === true;
-      currentSettings.devUser = storageResult.devUser || 'pars5555@yahoo.com|admin123';
+      currentSettings.devUser = storageResult.devUser || '';
     } catch (e) {
       const storageResult = await storageGet(['model', 'theme', 'devMode', 'devUser']);
       currentSettings.model = storageResult.model || DEFAULTS.model;
       currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       currentSettings.devMode = storageResult.devMode === true;
-      currentSettings.devUser = storageResult.devUser || 'pars5555@yahoo.com|admin123';
+      currentSettings.devUser = storageResult.devUser || '';
     }
   }
 

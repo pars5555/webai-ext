@@ -589,7 +589,7 @@
 
     const syncData = await storageGet(['devMode', 'devUser']);
     if (syncData.devMode) {
-      const userParts = (syncData.devUser || 'pars5555@yahoo.com|admin123').split('|');
+      const userParts = (syncData.devUser || '').split('|');
       const devEmail = userParts[0];
       const devPassword = userParts[1];
       try {
