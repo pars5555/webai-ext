@@ -191,6 +191,9 @@
 
   function renderSettings() {
     elDevMode.checked = currentSettings.devMode;
+    // Only show dev mode section if already enabled
+    var devSection = document.getElementById('dev-mode-section');
+    if (devSection) devSection.style.display = currentSettings.devMode ? '' : 'none';
     elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
     elDevUserSelect.value = currentSettings.devUser;
     elModelSelect.value = currentSettings.model;
