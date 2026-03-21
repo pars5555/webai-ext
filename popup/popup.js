@@ -35,8 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Server connection status + presence ping ────────────────────────────────
-  chrome.storage.sync.get(['devMode'], (result) => {
-    const serverUrl = result.devMode ? 'http://localhost:3466' : 'https://webai.pc.am';
+  chrome.storage.local.get(['devConfig'], (result) => {
+    const serverUrl = result.devConfig?.server || 'https://webai.pc.am';
     statusText.textContent = 'Checking server...';
 
     // Ping server for presence (popup opened = user is active)

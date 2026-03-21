@@ -26,8 +26,8 @@
   // ── Sessions tab ──────────────────────────────────────────────────────
   async function getServerUrl() {
     return new Promise(resolve => {
-      chrome.storage.sync.get(['devMode'], result => {
-        resolve(result.devMode ? 'http://localhost:3466' : 'https://webai.pc.am');
+      chrome.storage.local.get(['devConfig'], result => {
+        resolve(result.devConfig?.server || 'https://webai.pc.am');
       });
     });
   }

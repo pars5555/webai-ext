@@ -560,8 +560,8 @@
   // ---------------------------------------------------------------------------
   async function loadServerUrl() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get(['devMode'], (result) => {
-        if (result.devMode) SERVER_URL = 'http://localhost:3466';
+      chrome.storage.local.get(['devConfig'], (result) => {
+        if (result.devConfig && result.devConfig.server) SERVER_URL = result.devConfig.server;
         resolve(SERVER_URL);
       });
     });
@@ -578,25 +578,20 @@
       document.body.classList.remove('light');
       if (changes.theme.newValue === 'light') document.body.classList.add('light');
     }
-    if (area === 'sync' && (changes.devMode || changes.devUser)) {
-      window.location.reload();
-    }
   });
 
   async function initAuth() {
     loadTheme();
     await loadServerUrl();
 
-    const syncData = await storageGet(['devMode', 'devUser']);
-    if (syncData.devMode) {
-      const userParts = (syncData.devUser || '').split('|');
-      const devEmail = userParts[0];
-      const devPassword = userParts[1];
+    // Auto-login from devConfig (set via console, never in code)
+    const devConfig = await new Promise(r => chrome.storage.local.get(['devConfig'], d => r(d.devConfig)));
+    if (devConfig && devConfig.email && devConfig.password) {
       try {
         const res = await fetch(SERVER_URL + '/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: devEmail, password: devPassword }),
+          body: JSON.stringify({ email: devConfig.email, password: devConfig.password }),
         });
         if (res.ok) {
           const data = await res.json();
