@@ -11,6 +11,98 @@
 
   const $ = (sel) => document.querySelector(sel);
 
+  // ── Tab switching ─────────────────────────────────────────────────────
+  document.querySelectorAll('.options-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.options-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      tab.classList.add('active');
+      const target = document.getElementById('tab-' + tab.dataset.tab);
+      if (target) target.style.display = '';
+      if (tab.dataset.tab === 'sessions') loadSessions();
+    });
+  });
+
+  // ── Sessions tab ──────────────────────────────────────────────────────
+  async function getServerUrl() {
+    return new Promise(resolve => {
+      chrome.storage.sync.get(['devMode'], result => {
+        resolve(result.devMode ? 'http://localhost:3466' : 'https://webai.pc.am');
+      });
+    });
+  }
+
+  async function getAuthHeaders() {
+    return new Promise(resolve => {
+      chrome.storage.local.get(['authAccessToken'], result => {
+        resolve(result.authAccessToken ? { Authorization: 'Bearer ' + result.authAccessToken } : {});
+      });
+    });
+  }
+
+  async function loadSessions() {
+    const SERVER = await getServerUrl();
+    const headers = await getAuthHeaders();
+    const listEl = $('#session-list');
+    const chatEl = $('#session-chat');
+    const emptyEl = $('#session-empty');
+
+    try {
+      const res = await fetch(SERVER + '/api/user/chat-sessions', { headers });
+      if (!res.ok) { emptyEl.textContent = 'Please log in to view sessions'; return; }
+      const data = await res.json();
+      const sessions = data.sessions || [];
+
+      // Clear and populate
+      while (listEl.options.length > 1) listEl.options[1].remove();
+      sessions.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        const date = new Date(s.started_at || s.created_at).toLocaleDateString();
+        opt.textContent = (s.title || s.first_message || 'Untitled').substring(0, 40) + ' — ' + (s.model || '').split('-').slice(0,2).join('-') + ' · ' + date;
+        listEl.appendChild(opt);
+      });
+    } catch (e) {
+      emptyEl.textContent = 'Could not load sessions';
+    }
+  }
+
+  // Session select → load messages
+  $('#session-list')?.addEventListener('change', async () => {
+    const sid = $('#session-list').value;
+    const chatEl = $('#session-chat');
+    const emptyEl = $('#session-empty');
+    if (!sid) { chatEl.style.display = 'none'; emptyEl.style.display = ''; return; }
+
+    const SERVER = await getServerUrl();
+    const headers = await getAuthHeaders();
+
+    try {
+      chatEl.innerHTML = '<p style="padding:20px;text-align:center;color:#64748b;">Loading...</p>';
+      chatEl.style.display = '';
+      emptyEl.style.display = 'none';
+
+      const res = await fetch(SERVER + '/api/user/chat-sessions/' + sid + '/messages', { headers });
+      if (!res.ok) { chatEl.innerHTML = '<p style="padding:20px;color:#f87171;">Could not load messages</p>'; return; }
+      const data = await res.json();
+      const msgs = (data.messages || []).filter(m => m.role === 'user' || m.role === 'assistant');
+
+      if (msgs.length === 0) {
+        chatEl.innerHTML = '<p style="padding:20px;text-align:center;color:#64748b;">No messages</p>';
+        return;
+      }
+
+      chatEl.innerHTML = msgs.map(m => {
+        const role = m.role === 'user' ? 'You' : 'AI';
+        const cls = m.role === 'user' ? 'session-msg-user' : 'session-msg-assistant';
+        const text = (m.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        return '<div class="session-msg ' + cls + '"><div class="session-msg-role">' + role + '</div>' + text + '</div>';
+      }).join('');
+    } catch (e) {
+      chatEl.innerHTML = '<p style="padding:20px;color:#f87171;">Error: ' + e.message + '</p>';
+    }
+  });
+
   const elExtVersion = $('#ext-version');
   const elDevMode = $('#dev-mode-toggle');
   const elDevUserGroup = $('#dev-user-group');

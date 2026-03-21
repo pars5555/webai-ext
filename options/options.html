@@ -26,6 +26,15 @@
       </div>
     </header>
 
+    <!-- Tabs -->
+    <div class="options-tabs">
+      <button class="options-tab active" data-tab="settings">Settings</button>
+      <button class="options-tab" data-tab="sessions">Sessions</button>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tab-settings" class="tab-content active">
+
     <!-- General Settings -->
     <section class="card">
       <h2 class="card-title">
@@ -91,6 +100,26 @@
         </button>
       </div>
     </section>
+
+    </div><!-- end tab-settings -->
+
+    <!-- Sessions Tab -->
+    <div id="tab-sessions" class="tab-content" style="display:none;">
+      <section class="card">
+        <h2 class="card-title">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+          Chat Sessions
+        </h2>
+        <div style="margin-bottom:12px;">
+          <select id="session-list" style="width:100%;padding:8px 12px;background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;">
+            <option value="">Select a session...</option>
+          </select>
+        </div>
+        <div id="session-chat" style="max-height:500px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-input);display:none;">
+        </div>
+        <p id="session-empty" class="toggle-desc" style="text-align:center;padding:20px;">Select a session to view chat history</p>
+      </section>
+    </div><!-- end tab-sessions -->
 
   </div>
 

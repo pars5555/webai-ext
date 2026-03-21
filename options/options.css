@@ -56,6 +56,40 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Tabs */
+.options-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.options-tab {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+}
+.options-tab.active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+  color: #c4b5fd;
+}
+.options-tab:hover { background: rgba(255,255,255,0.05); }
+.options-tab.active:hover { background: rgba(124, 58, 237, 0.25); }
+
+/* Session chat messages */
+.session-msg {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.session-msg-user { background: rgba(124, 58, 237, 0.08); color: #c4b5fd; }
+.session-msg-assistant { color: #e2e8f0; }
+.session-msg-role { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+
 .version-label {
   font-size: 13px;
   color: #64748b;
