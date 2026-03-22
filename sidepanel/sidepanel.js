@@ -393,16 +393,7 @@
       container.innerHTML = '';
       var history = [];
       msgs.forEach(function(m) {
-        var msgEl = document.createElement('div');
-        msgEl.className = 'wai-msg wai-msg-' + m.role;
-        var bubble = document.createElement('div');
-        bubble.className = 'wai-msg-bubble';
-        if (m.role === 'assistant') {
-          bubble.innerHTML = renderMarkdown(m.content || '');
-        } else {
-          bubble.textContent = m.content || '';
-        }
-        msgEl.appendChild(bubble);
+        var msgEl = createMessageElement(m.role, m.content || '');
         container.appendChild(msgEl);
         history.push({ role: m.role, content: m.content || '' });
       });
