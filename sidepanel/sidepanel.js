@@ -346,10 +346,13 @@
       try { openTabs = await chrome.tabs.query({ currentWindow: true }); } catch (e) {}
       var tabIdSet = new Set(openTabs.map(function(t) { return t.id; }));
 
-      // Load sessions whose tab is still open
+      // Load only the latest session per open tab
+      var loadedTabIds = new Set();
       for (const s of serverSessions) {
         if (sessions.has(s.id)) continue;
         if (!s.tab_id || !tabIdSet.has(s.tab_id)) continue;
+        if (loadedTabIds.has(s.tab_id)) continue; // skip older sessions for same tab
+        loadedTabIds.add(s.tab_id);
 
         // Create container and load messages
         const el = createSessionContainer(s.id);
