@@ -320,10 +320,9 @@
       var tabs = await chrome.tabs.query({ currentWindow: true });
       tabs.forEach(function(t) { openTabIds.add(t.id); });
     } catch (e) { openTabIds = null; }
-    // Only show sessions whose tab still exists — remove dead ones
+    // Only show sessions whose tab still exists
     for (const [sid, s] of sessions) {
       if (s.tabId && openTabIds && !openTabIds.has(s.tabId)) {
-        // Tab closed — remove session from memory
         sessions.delete(sid);
         continue;
       }
@@ -341,27 +340,75 @@
       if (!res.ok) return;
       const data = await res.json();
       const serverSessions = data.sessions || [];
+
+      // Get all open tab IDs
+      var openTabs = [];
+      try { openTabs = await chrome.tabs.query({ currentWindow: true }); } catch (e) {}
+      var tabIdSet = new Set(openTabs.map(function(t) { return t.id; }));
+
+      // Load sessions whose tab is still open
       for (const s of serverSessions) {
-        if (!sessions.has(s.id)) {
-          // Create a container for this session (messages will be loaded lazily)
-          const el = createSessionContainer(s.id);
-          el.innerHTML = '<div class="wai-welcome"><p style="color:#64748b;font-size:12px;">Chat: ' + escapeHtml(s.title || 'Untitled') + '</p><p style="color:#475569;font-size:11px;">Switch here to continue this chat</p></div>';
-          sessions.set(s.id, {
-            el: el,
-            history: [],
-            isStreaming: false,
-            streamText: '',
-            tabId: null, // Don't set tabId for server-loaded sessions (stale tab mappings)
-            model: s.model || '',
-            title: s.title || s.id.slice(0, 8),
-            firstMessage: s.first_message || '',
-            loaded: false, // messages not yet loaded from server
-            inputValue: '',
-            inputAttachments: [],
-          });
-        }
+        if (sessions.has(s.id)) continue;
+        if (!s.tab_id || !tabIdSet.has(s.tab_id)) continue;
+
+        // Create container and load messages
+        const el = createSessionContainer(s.id);
+        sessions.set(s.id, {
+          el: el,
+          history: [],
+          isStreaming: false,
+          streamText: '',
+          tabId: s.tab_id,
+          model: s.model || '',
+          title: s.title || s.first_message || s.id.slice(0, 8),
+          firstMessage: s.first_message || '',
+          loaded: false,
+          inputValue: '',
+          inputAttachments: [],
+        });
+
+        // Load messages in background
+        loadSessionMessages(s.id, el);
       }
       updateSessionSelector();
+    } catch (e) { /* silent */ }
+  }
+
+  async function loadSessionMessages(sessionId, container) {
+    try {
+      var res = await fetch(SERVER_URL + '/api/user/chat-sessions/' + sessionId + '/messages', {
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) return;
+      var data = await res.json();
+      var msgs = (data.messages || []).filter(function(m) { return m.role === 'user' || m.role === 'assistant'; });
+      if (msgs.length === 0) {
+        container.innerHTML = '<div class="wai-welcome"><p style="color:#64748b;font-size:13px;">Empty session</p></div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      var history = [];
+      msgs.forEach(function(m) {
+        var msgEl = document.createElement('div');
+        msgEl.className = 'wai-msg wai-msg-' + m.role;
+        var bubble = document.createElement('div');
+        bubble.className = 'wai-msg-bubble';
+        if (m.role === 'assistant') {
+          bubble.innerHTML = renderMarkdown(m.content || '');
+        } else {
+          bubble.textContent = m.content || '';
+        }
+        msgEl.appendChild(bubble);
+        container.appendChild(msgEl);
+        history.push({ role: m.role, content: m.content || '' });
+      });
+
+      var session = sessions.get(sessionId);
+      if (session) {
+        session.history = history;
+        session.loaded = true;
+      }
     } catch (e) { /* silent */ }
   }
 
@@ -777,7 +824,7 @@
     updateUserBadge();
     syncModelFromServer();
     pingServer();
-    // Session selector only shows sessions from current browser tabs
+    loadUserSessions(); // Load active sessions from server
   }
 
   const userBalanceEl = document.getElementById('wai-user-balance');
