@@ -38,7 +38,7 @@
   // Highlight overlay management
   let highlightOverlays = [];
 
-  window.ClaudeDOMInspector = {
+  window.WebAIDOMInspector = {
 
     getPageContext() {
       const metaTags = [];
@@ -151,7 +151,7 @@
         elements.forEach(el => {
           const rect = el.getBoundingClientRect();
           const overlay = document.createElement('div');
-          overlay.className = 'claude-highlight-overlay';
+          overlay.className = 'webai-highlight-overlay';
           overlay.style.cssText = `
             position: fixed;
             top: ${rect.top}px;
@@ -181,7 +181,7 @@
     clearHighlights() {
       highlightOverlays.forEach(el => el.remove());
       highlightOverlays = [];
-      document.querySelectorAll('.claude-highlight-overlay').forEach(el => el.remove());
+      document.querySelectorAll('.webai-highlight-overlay').forEach(el => el.remove());
     },
 
     getComputedStylesFor(selector) {

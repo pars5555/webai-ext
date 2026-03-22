@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  if (window.ClaudePageDataCollector) {
+  if (window.WebAIPageDataCollector) {
     return;
   }
 
@@ -39,7 +39,7 @@
   var MAX_RESOURCES = 30;
   var MAX_SOURCES_EACH = 50;
 
-  window.ClaudePageDataCollector = {
+  window.WebAIPageDataCollector = {
 
     /**
      * Parse document.cookie into an array of {name, value} objects.

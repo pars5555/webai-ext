@@ -110,7 +110,7 @@ body {
    Panel Header
    ======================================================================== */
 
-.claude-panel-header {
+.wai-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -121,23 +121,23 @@ body {
   user-select: none;
 }
 
-.claude-panel-header-left {
+.wai-panel-header-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.claude-panel-logo {
+.wai-panel-logo {
   flex-shrink: 0;
 }
 
-.claude-panel-logo img {
+.wai-panel-logo img {
   width: 28px;
   height: 28px;
   border-radius: 6px;
 }
 
-#claude-model-select {
+#wai-model-select {
   background: rgba(124, 58, 237, 0.15);
   color: #c4b5fd;
   border: 1px solid rgba(124, 58, 237, 0.3);
@@ -155,23 +155,23 @@ body {
   padding-right: 18px;
 }
 
-#claude-model-select:hover {
+#wai-model-select:hover {
   border-color: rgba(124, 58, 237, 0.5);
   background-color: rgba(124, 58, 237, 0.25);
 }
 
-#claude-model-select option {
+#wai-model-select option {
   background: #1e1f36;
   color: #e2e8f0;
 }
 
-.claude-panel-header-actions {
+.wai-panel-header-actions {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.claude-header-btn {
+.wai-header-btn {
   width: 32px;
   height: 32px;
   border: none;
@@ -186,12 +186,12 @@ body {
   padding: 0;
 }
 
-.claude-header-btn:hover {
+.wai-header-btn:hover {
   background: rgba(124, 58, 237, 0.2);
   color: #c4b5fd;
 }
 
-.claude-header-btn svg {
+.wai-header-btn svg {
   width: 16px;
   height: 16px;
   fill: currentColor;
@@ -201,7 +201,7 @@ body {
    Session Selector
    ======================================================================== */
 
-#claude-session-select {
+#wai-session-select {
   background: rgba(124, 58, 237, 0.10);
   color: #c4b5fd;
   border: 1px solid rgba(124, 58, 237, 0.2);
@@ -221,12 +221,12 @@ body {
   padding-right: 16px;
 }
 
-#claude-session-select:hover {
+#wai-session-select:hover {
   border-color: rgba(124, 58, 237, 0.4);
   background-color: rgba(124, 58, 237, 0.18);
 }
 
-#claude-session-select option {
+#wai-session-select option {
   background: #1e1f36;
   color: #e2e8f0;
   font-size: 11px;
@@ -236,7 +236,7 @@ body {
    Sessions Wrapper & Containers
    ======================================================================== */
 
-.claude-sessions-wrapper {
+.wai-sessions-wrapper {
   flex: 1;
   position: relative;
   overflow: hidden;
@@ -262,23 +262,23 @@ body {
    ======================================================================== */
 
 .session-container::-webkit-scrollbar,
-.claude-messages::-webkit-scrollbar {
+.wai-messages::-webkit-scrollbar {
   width: 10px;
 }
 
 .session-container::-webkit-scrollbar-track,
-.claude-messages::-webkit-scrollbar-track {
+.wai-messages::-webkit-scrollbar-track {
   background: #1a1a2e;
 }
 
 .session-container::-webkit-scrollbar-thumb,
-.claude-messages::-webkit-scrollbar-thumb {
+.wai-messages::-webkit-scrollbar-thumb {
   background: #555;
   border-radius: 5px;
 }
 
 .session-container::-webkit-scrollbar-thumb:hover,
-.claude-messages::-webkit-scrollbar-thumb:hover {
+.wai-messages::-webkit-scrollbar-thumb:hover {
   background: #888;
 }
 
@@ -286,13 +286,13 @@ body {
    Welcome Message
    ======================================================================== */
 
-.claude-welcome {
+.wai-welcome {
   text-align: center;
   padding: 30px 20px;
   color: #64748b;
 }
 
-.claude-welcome-icon {
+.wai-welcome-icon {
   width: 48px;
   height: 48px;
   margin: 0 auto 16px;
@@ -303,20 +303,20 @@ body {
   justify-content: center;
 }
 
-.claude-welcome-icon img {
+.wai-welcome-icon img {
   width: 48px;
   height: 48px;
   border-radius: 10px;
 }
 
-.claude-welcome h3 {
+.wai-welcome h3 {
   margin: 0 0 8px;
   font-size: 16px;
   font-weight: 600;
   color: #e2e8f0;
 }
 
-.claude-welcome p {
+.wai-welcome p {
   margin: 0 0 4px;
   font-size: 13px;
   line-height: 1.5;
@@ -326,27 +326,27 @@ body {
    Message Bubbles
    ======================================================================== */
 
-.claude-message {
+.wai-message {
   display: flex;
   flex-direction: column;
   max-width: 95%;
-  animation: claude-msg-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: wai-msg-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes claude-msg-in {
+@keyframes wai-msg-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.claude-message-user {
+.wai-message-user {
   align-self: flex-end;
 }
 
-.claude-message-assistant {
+.wai-message-assistant {
   align-self: flex-start;
 }
 
-.claude-message-label {
+.wai-message-label {
   font-size: 11px;
   font-weight: 600;
   margin-bottom: 3px;
@@ -354,18 +354,18 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.claude-message-user .claude-message-label { color: #a78bfa; text-align: right; }
-.claude-message-assistant .claude-message-label { color: #7dd3fc; }
+.wai-message-user .wai-message-label { color: #a78bfa; text-align: right; }
+.wai-message-assistant .wai-message-label { color: #7dd3fc; }
 
-.claude-message-time {
+.wai-message-time {
   font-size: 10px;
   color: #64748b;
   margin-top: 2px;
   padding: 0 2px;
 }
-.claude-message-user .claude-message-time { text-align: right; }
+.wai-message-user .wai-message-time { text-align: right; }
 
-.claude-message-bubble {
+.wai-message-bubble {
   padding: 10px 14px;
   border-radius: 14px;
   font-size: 13.5px;
@@ -374,13 +374,13 @@ body {
   overflow-wrap: break-word;
 }
 
-.claude-message-user .claude-message-bubble {
+.wai-message-user .wai-message-bubble {
   background: linear-gradient(135deg, #7C3AED, #6D28D9);
   color: #ffffff;
   border-bottom-right-radius: 4px;
 }
 
-.claude-message-assistant .claude-message-bubble {
+.wai-message-assistant .wai-message-bubble {
   background: #252745;
   color: #e2e8f0;
   border: 1px solid rgba(124, 58, 237, 0.1);
@@ -388,7 +388,7 @@ body {
 }
 
 /* Message-level actions (copy whole response) */
-.claude-message-actions {
+.wai-message-actions {
   display: flex;
   gap: 4px;
   padding-top: 4px;
@@ -396,11 +396,11 @@ body {
   transition: opacity 0.15s;
 }
 
-.claude-message:hover .claude-message-actions {
+.wai-message:hover .wai-message-actions {
   opacity: 1;
 }
 
-.claude-msg-copy-btn {
+.wai-msg-copy-btn {
   width: 24px;
   height: 24px;
   border: none;
@@ -415,7 +415,7 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-.claude-msg-copy-btn:hover {
+.wai-msg-copy-btn:hover {
   background: rgba(124, 58, 237, 0.15);
   color: #a78bfa;
 }
@@ -424,62 +424,62 @@ body {
    Markdown Styles (inside assistant bubbles)
    ======================================================================== */
 
-.claude-message-assistant .claude-message-bubble p {
+.wai-message-assistant .wai-message-bubble p {
   margin: 0 0 8px;
 }
 
-.claude-message-assistant .claude-message-bubble p:last-child {
+.wai-message-assistant .wai-message-bubble p:last-child {
   margin-bottom: 0;
 }
 
-.claude-message-assistant .claude-message-bubble strong {
+.wai-message-assistant .wai-message-bubble strong {
   color: #f1f5f9;
   font-weight: 600;
 }
 
-.claude-message-assistant .claude-message-bubble em {
+.wai-message-assistant .wai-message-bubble em {
   color: #c4b5fd;
 }
 
-.claude-message-assistant .claude-message-bubble a {
+.wai-message-assistant .wai-message-bubble a {
   color: #a78bfa;
   text-decoration: underline;
   text-decoration-color: rgba(167, 139, 250, 0.4);
   transition: color 0.2s;
 }
 
-.claude-message-assistant .claude-message-bubble a:hover {
+.wai-message-assistant .wai-message-bubble a:hover {
   color: #c4b5fd;
   text-decoration-color: rgba(196, 181, 253, 0.6);
 }
 
-.claude-message-assistant .claude-message-bubble ul,
-.claude-message-assistant .claude-message-bubble ol {
+.wai-message-assistant .wai-message-bubble ul,
+.wai-message-assistant .wai-message-bubble ol {
   margin: 6px 0;
   padding-left: 20px;
 }
 
-.claude-message-assistant .claude-message-bubble li {
+.wai-message-assistant .wai-message-bubble li {
   margin-bottom: 4px;
 }
 
-.claude-message-assistant .claude-message-bubble h1,
-.claude-message-assistant .claude-message-bubble h2,
-.claude-message-assistant .claude-message-bubble h3,
-.claude-message-assistant .claude-message-bubble h4 {
+.wai-message-assistant .wai-message-bubble h1,
+.wai-message-assistant .wai-message-bubble h2,
+.wai-message-assistant .wai-message-bubble h3,
+.wai-message-assistant .wai-message-bubble h4 {
   color: #f1f5f9;
   margin: 12px 0 6px;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.claude-message-assistant .claude-message-bubble h1 { font-size: 17px; }
-.claude-message-assistant .claude-message-bubble h2 { font-size: 15px; }
-.claude-message-assistant .claude-message-bubble h3 { font-size: 14px; }
-.claude-message-assistant .claude-message-bubble h4 { font-size: 13.5px; color: #cbd5e1; }
+.wai-message-assistant .wai-message-bubble h1 { font-size: 17px; }
+.wai-message-assistant .wai-message-bubble h2 { font-size: 15px; }
+.wai-message-assistant .wai-message-bubble h3 { font-size: 14px; }
+.wai-message-assistant .wai-message-bubble h4 { font-size: 13.5px; color: #cbd5e1; }
 
 /* Inline code */
-.claude-message-bubble code:not(.claude-code-block code) {
+.wai-message-bubble code:not(.wai-code-block code) {
   background: rgba(124, 58, 237, 0.15);
   color: #c4b5fd;
   padding: 2px 6px;
@@ -492,7 +492,7 @@ body {
    Code Blocks
    ======================================================================== */
 
-.claude-code-block {
+.wai-code-block {
   position: relative;
   margin: 8px 0;
   border-radius: 10px;
@@ -501,7 +501,7 @@ body {
   border: 1px solid rgba(124, 58, 237, 0.15);
 }
 
-.claude-code-header {
+.wai-code-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -514,7 +514,7 @@ body {
   letter-spacing: 0.04em;
 }
 
-.claude-code-copy {
+.wai-code-copy {
   background: none;
   border: none;
   color: #64748b;
@@ -525,12 +525,12 @@ body {
   transition: all 0.2s;
 }
 
-.claude-code-copy:hover {
+.wai-code-copy:hover {
   background: rgba(124, 58, 237, 0.2);
   color: #c4b5fd;
 }
 
-.claude-code-block pre {
+.wai-code-block pre {
   margin: 0;
   padding: 12px;
   overflow-x: auto;
@@ -540,34 +540,34 @@ body {
   color: #e2e8f0;
 }
 
-.claude-code-block pre::-webkit-scrollbar {
+.wai-code-block pre::-webkit-scrollbar {
   height: 4px;
 }
 
-.claude-code-block pre::-webkit-scrollbar-track {
+.wai-code-block pre::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.claude-code-block pre::-webkit-scrollbar-thumb {
+.wai-code-block pre::-webkit-scrollbar-thumb {
   background: rgba(124, 58, 237, 0.3);
   border-radius: 2px;
 }
 
 /* Syntax highlighting */
-.claude-code-block .kw { color: #c792ea; }
-.claude-code-block .str { color: #c3e88d; }
-.claude-code-block .num { color: #f78c6c; }
-.claude-code-block .cm { color: #546e7a; }
-.claude-code-block .fn { color: #82aaff; }
-.claude-code-block .op { color: #89ddff; }
-.claude-code-block .tag { color: #f07178; }
-.claude-code-block .attr { color: #ffcb6b; }
+.wai-code-block .kw { color: #c792ea; }
+.wai-code-block .str { color: #c3e88d; }
+.wai-code-block .num { color: #f78c6c; }
+.wai-code-block .cm { color: #546e7a; }
+.wai-code-block .fn { color: #82aaff; }
+.wai-code-block .op { color: #89ddff; }
+.wai-code-block .tag { color: #f07178; }
+.wai-code-block .attr { color: #ffcb6b; }
 
 /* ========================================================================
    Collapsible Tool Blocks (CDP/JS code & results)
    ======================================================================== */
 
-.claude-tool-block {
+.wai-tool-block {
   margin: 6px 0;
   border-radius: 8px;
   border: 1px solid rgba(124, 58, 237, 0.12);
@@ -576,7 +576,7 @@ body {
   font-size: 12px;
 }
 
-.claude-tool-block summary {
+.wai-tool-block summary {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -588,11 +588,11 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-.claude-tool-block summary::-webkit-details-marker {
+.wai-tool-block summary::-webkit-details-marker {
   display: none;
 }
 
-.claude-tool-block summary::before {
+.wai-tool-block summary::before {
   content: '\25B6';
   font-size: 8px;
   color: #475569;
@@ -600,22 +600,22 @@ body {
   flex-shrink: 0;
 }
 
-.claude-tool-block[open] summary::before {
+.wai-tool-block[open] summary::before {
   transform: rotate(90deg);
 }
 
-.claude-tool-block summary:hover {
+.wai-tool-block summary:hover {
   background: rgba(124, 58, 237, 0.08);
   color: #94a3b8;
 }
 
-.claude-tool-icon {
+.wai-tool-icon {
   font-size: 12px;
   flex-shrink: 0;
   line-height: 1;
 }
 
-.claude-tool-label {
+.wai-tool-label {
   font-weight: 500;
   color: #94a3b8;
   white-space: nowrap;
@@ -626,7 +626,7 @@ body {
   font-size: 11px;
 }
 
-.claude-tool-preview {
+.wai-tool-preview {
   color: #475569;
   font-size: 11px;
   white-space: nowrap;
@@ -636,7 +636,7 @@ body {
   min-width: 0;
 }
 
-.claude-tool-lines {
+.wai-tool-lines {
   color: #475569;
   font-size: 10px;
   white-space: nowrap;
@@ -644,19 +644,19 @@ body {
   flex-shrink: 0;
 }
 
-.claude-tool-code .claude-tool-icon { color: #7C3AED; }
-.claude-tool-ok .claude-tool-icon { color: #4ade80; }
-.claude-tool-error .claude-tool-icon { color: #f87171; }
-.claude-tool-error .claude-tool-label { color: #fca5a5; }
+.wai-tool-code .wai-tool-icon { color: #7C3AED; }
+.wai-tool-ok .wai-tool-icon { color: #4ade80; }
+.wai-tool-error .wai-tool-icon { color: #f87171; }
+.wai-tool-error .wai-tool-label { color: #fca5a5; }
 
-.claude-tool-block .claude-code-block {
+.wai-tool-block .wai-code-block {
   margin: 0;
   border: none;
   border-top: 1px solid rgba(124, 58, 237, 0.1);
   border-radius: 0;
 }
 
-.claude-tool-content {
+.wai-tool-content {
   padding: 8px 10px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
   font-size: 11.5px;
@@ -669,7 +669,7 @@ body {
   word-break: break-all;
 }
 
-.claude-tool-content code {
+.wai-tool-content code {
   background: none !important;
   padding: 0 !important;
   color: inherit !important;
@@ -677,7 +677,7 @@ body {
 }
 
 /* Auto-execution status */
-.claude-auto-exec-status {
+.wai-auto-exec-status {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -689,22 +689,22 @@ body {
   margin: 4px 0;
 }
 
-.claude-auto-exec-status::before {
+.wai-auto-exec-status::before {
   content: '';
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #7C3AED;
-  animation: claude-pulse 1.5s infinite;
+  animation: wai-pulse 1.5s infinite;
 }
 
-@keyframes claude-pulse {
+@keyframes wai-pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
 }
 
 /* Execute query button */
-.claude-execute-query {
+.wai-execute-query {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -719,7 +719,7 @@ body {
   transition: all 0.2s;
 }
 
-.claude-execute-query:hover {
+.wai-execute-query:hover {
   background: rgba(124, 58, 237, 0.25);
   color: #c4b5fd;
 }
@@ -728,26 +728,26 @@ body {
    Typing Indicator
    ======================================================================== */
 
-.claude-typing {
+.wai-typing {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 12px 16px;
 }
 
-.claude-typing-dot {
+.wai-typing-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #7C3AED;
-  animation: claude-typing-bounce 1.4s infinite both;
+  animation: wai-typing-bounce 1.4s infinite both;
 }
 
-.claude-typing-dot:nth-child(1) { animation-delay: 0s; }
-.claude-typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.claude-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+.wai-typing-dot:nth-child(1) { animation-delay: 0s; }
+.wai-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.wai-typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
-@keyframes claude-typing-bounce {
+@keyframes wai-typing-bounce {
   0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
 }
@@ -756,7 +756,7 @@ body {
    Error Message
    ======================================================================== */
 
-.claude-error-msg {
+.wai-error-msg {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 10px;
@@ -768,7 +768,7 @@ body {
   gap: 8px;
 }
 
-.claude-error-msg svg {
+.wai-error-msg svg {
   width: 16px;
   height: 16px;
   fill: #f87171;
@@ -780,7 +780,7 @@ body {
    System Message
    ======================================================================== */
 
-.claude-system-msg {
+.wai-system-msg {
   text-align: center;
   font-size: 11px;
   color: #475569;
@@ -793,7 +793,7 @@ body {
    Context Meter
    ======================================================================== */
 
-.claude-context-bar {
+.wai-context-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -803,7 +803,7 @@ body {
   flex-shrink: 0;
 }
 
-.claude-context-meter {
+.wai-context-meter {
   flex: 1;
   height: 4px;
   background: rgba(124, 58, 237, 0.1);
@@ -811,7 +811,7 @@ body {
   overflow: hidden;
 }
 
-.claude-context-fill {
+.wai-context-fill {
   height: 100%;
   width: 0%;
   border-radius: 2px;
@@ -819,15 +819,15 @@ body {
   transition: width 0.3s, background 0.3s;
 }
 
-.claude-context-fill.warn {
+.wai-context-fill.warn {
   background: #f59e0b;
 }
 
-.claude-context-fill.critical {
+.wai-context-fill.critical {
   background: #ef4444;
 }
 
-.claude-context-label {
+.wai-context-label {
   font-size: 10px;
   color: #64748b;
   white-space: nowrap;
@@ -835,7 +835,7 @@ body {
   text-align: right;
 }
 
-.claude-context-compact-btn {
+.wai-context-compact-btn {
   width: 22px;
   height: 22px;
   border: none;
@@ -850,12 +850,12 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-.claude-context-compact-btn:hover {
+.wai-context-compact-btn:hover {
   background: rgba(124, 58, 237, 0.15);
   color: #a78bfa;
 }
 
-.claude-context-compact-btn:disabled {
+.wai-context-compact-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
@@ -864,7 +864,7 @@ body {
    Input Area
    ======================================================================== */
 
-.claude-input-area {
+.wai-input-area {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -874,18 +874,18 @@ body {
   flex-shrink: 0;
 }
 
-.claude-input-main {
+.wai-input-main {
   display: flex;
   align-items: flex-end;
   gap: 8px;
 }
 
-.claude-input-wrapper {
+.wai-input-wrapper {
   flex: 1;
   position: relative;
 }
 
-#claude-chat-input {
+#wai-chat-input {
   width: 100%;
   min-height: 38px;
   max-height: 120px;
@@ -903,11 +903,11 @@ body {
   box-sizing: border-box;
 }
 
-#claude-chat-input::placeholder {
+#wai-chat-input::placeholder {
   color: #475569;
 }
 
-#claude-chat-input:focus {
+#wai-chat-input:focus {
   border-color: rgba(124, 58, 237, 0.5);
 }
 
@@ -915,7 +915,7 @@ body {
    Send Button
    ======================================================================== */
 
-#claude-send-btn {
+#wai-send-btn {
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -930,30 +930,30 @@ body {
   padding: 0;
 }
 
-#claude-send-btn:hover {
+#wai-send-btn:hover {
   background: linear-gradient(135deg, #8B5CF6, #7C3AED);
   transform: scale(1.05);
 }
 
-#claude-send-btn:active {
+#wai-send-btn:active {
   transform: scale(0.95);
 }
 
-#claude-send-btn:disabled {
+#wai-send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-#claude-send-btn.stop-mode {
+#wai-send-btn.stop-mode {
   background: linear-gradient(135deg, #ef4444, #dc2626);
 }
 
-#claude-send-btn.stop-mode:hover {
+#wai-send-btn.stop-mode:hover {
   background: linear-gradient(135deg, #f87171, #ef4444);
 }
 
-#claude-send-btn svg {
+#wai-send-btn svg {
   width: 18px;
   height: 18px;
   fill: white;
@@ -963,7 +963,7 @@ body {
    Input Bottom Bar (tab context + actions)
    ======================================================================== */
 
-.claude-input-bottom {
+.wai-input-bottom {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -971,7 +971,7 @@ body {
   min-height: 24px;
 }
 
-.claude-input-action-btn {
+.wai-input-action-btn {
   width: 24px;
   height: 24px;
   border: none;
@@ -987,12 +987,12 @@ body {
   flex-shrink: 0;
 }
 
-.claude-input-action-btn:hover {
+.wai-input-action-btn:hover {
   background: rgba(124, 58, 237, 0.15);
   color: #a78bfa;
 }
 
-.claude-tab-context {
+.wai-tab-context {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1005,12 +1005,12 @@ body {
   flex: 1;
 }
 
-.claude-tab-context svg {
+.wai-tab-context svg {
   flex-shrink: 0;
   opacity: 0.7;
 }
 
-#claude-tab-context-label {
+#wai-tab-context-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1020,14 +1020,14 @@ body {
    Attachments Preview
    ======================================================================== */
 
-.claude-attachments {
+.wai-attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 0 4px;
 }
 
-.claude-attachment-item {
+.wai-attachment-item {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1040,7 +1040,7 @@ body {
   max-width: 180px;
 }
 
-.claude-attachment-item img {
+.wai-attachment-item img {
   width: 20px;
   height: 20px;
   border-radius: 3px;
@@ -1048,7 +1048,7 @@ body {
   flex-shrink: 0;
 }
 
-.claude-attachment-name {
+.wai-attachment-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1056,7 +1056,7 @@ body {
   min-width: 0;
 }
 
-.claude-attachment-remove {
+.wai-attachment-remove {
   width: 14px;
   height: 14px;
   border: none;
@@ -1074,7 +1074,7 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-.claude-attachment-remove:hover {
+.wai-attachment-remove:hover {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
 }
@@ -1083,7 +1083,7 @@ body {
    Auth Overlay
    ======================================================================== */
 
-.claude-auth-overlay {
+.wai-auth-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -1098,7 +1098,7 @@ body {
   overflow-y: auto;
 }
 
-.claude-auth-card {
+.wai-auth-card {
   width: 100%;
   max-width: 360px;
   background: #1e1f36;
@@ -1108,25 +1108,25 @@ body {
   text-align: center;
 }
 
-.claude-auth-logo {
+.wai-auth-logo {
   margin-bottom: 12px;
 }
 
-.claude-auth-title {
+.wai-auth-title {
   font-size: 18px;
   font-weight: 700;
   color: #f1f5f9;
   margin: 0 0 4px;
 }
 
-.claude-auth-subtitle {
+.wai-auth-subtitle {
   font-size: 12px;
   color: #64748b;
   margin: 0 0 18px;
 }
 
 /* Auth Buttons */
-.claude-auth-btn {
+.wai-auth-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1142,44 +1142,44 @@ body {
   font-family: inherit;
 }
 
-.claude-auth-btn:disabled {
+.wai-auth-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.claude-auth-btn-google {
+.wai-auth-btn-google {
   background: #4285F4;
   color: white;
   margin-bottom: 8px;
 }
 
-.claude-auth-btn-google:hover:not(:disabled) {
+.wai-auth-btn-google:hover:not(:disabled) {
   background: #3367d6;
 }
 
-.claude-auth-btn-apple {
+.wai-auth-btn-apple {
   background: #000;
   color: white;
   margin-bottom: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.claude-auth-btn-apple:hover:not(:disabled) {
+.wai-auth-btn-apple:hover:not(:disabled) {
   background: #1a1a1a;
 }
 
-.claude-auth-btn-github {
+.wai-auth-btn-github {
   background: #24292e;
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.claude-auth-btn-github:hover:not(:disabled) {
+.wai-auth-btn-github:hover:not(:disabled) {
   background: #2f363d;
 }
 
 /* Auth Error/Success Messages */
-.claude-auth-error {
+.wai-auth-error {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 8px;
@@ -1190,7 +1190,7 @@ body {
   text-align: left;
 }
 
-.claude-auth-success {
+.wai-auth-success {
   background: rgba(74, 222, 128, 0.1);
   border: 1px solid rgba(74, 222, 128, 0.3);
   border-radius: 8px;
@@ -1205,7 +1205,7 @@ body {
    User Badge (header)
    ======================================================================== */
 
-.claude-user-badge {
+.wai-user-badge {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1218,11 +1218,11 @@ body {
   max-width: 140px;
 }
 
-.claude-user-badge:hover {
+.wai-user-badge:hover {
   background: rgba(124, 58, 237, 0.25);
 }
 
-.claude-user-badge-text {
+.wai-user-badge-text {
   font-size: 11px;
   color: #c4b5fd;
   overflow: hidden;
@@ -1230,12 +1230,12 @@ body {
   white-space: nowrap;
 }
 
-.claude-user-badge svg {
+.wai-user-badge svg {
   color: #94a3b8;
   flex-shrink: 0;
 }
 
-.claude-menu-item:hover {
+.wai-menu-item:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -1243,7 +1243,7 @@ body {
    Trial Timer (header)
    ======================================================================== */
 
-.claude-trial-timer {
+.wai-trial-timer {
   font-size: 11px;
   font-weight: 600;
   color: #f59e0b;
@@ -1255,7 +1255,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.claude-trial-timer.expired {
+.wai-trial-timer.expired {
   color: #f87171;
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.3);
@@ -1265,7 +1265,7 @@ body {
    Trial Expired Banner
    ======================================================================== */
 
-.claude-trial-expired-banner {
+.wai-trial-expired-banner {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 8px;
@@ -1276,7 +1276,7 @@ body {
   font-size: 12px;
 }
 
-.claude-trial-expired-banner strong {
+.wai-trial-expired-banner strong {
   display: block;
   margin-bottom: 4px;
   color: #f87171;
@@ -1293,185 +1293,185 @@ body.light {
 }
 
 /* Header */
-body.light .claude-panel-header {
+body.light .wai-panel-header {
   background: linear-gradient(135deg, #f1f5f9, #e8ecf4);
   border-bottom-color: rgba(124, 58, 237, 0.12);
 }
 
-body.light #claude-model-select {
+body.light #wai-model-select {
   background: rgba(124, 58, 237, 0.08);
   color: #6D28D9;
   border-color: rgba(124, 58, 237, 0.2);
 }
 
-body.light #claude-model-select option {
+body.light #wai-model-select option {
   background: #ffffff;
   color: #1e293b;
 }
 
-body.light .claude-header-btn {
+body.light .wai-header-btn {
   color: #64748b;
 }
 
-body.light .claude-header-btn:hover {
+body.light .wai-header-btn:hover {
   background: rgba(124, 58, 237, 0.1);
   color: #6D28D9;
 }
 
 /* Messages */
-body.light .claude-messages::-webkit-scrollbar-track,
+body.light .wai-messages::-webkit-scrollbar-track,
 body.light .session-container::-webkit-scrollbar-track {
   background: #f8f9fc;
 }
 
-body.light .claude-messages::-webkit-scrollbar-thumb,
+body.light .wai-messages::-webkit-scrollbar-thumb,
 body.light .session-container::-webkit-scrollbar-thumb {
   background: #cbd5e1;
 }
 
-body.light .claude-messages::-webkit-scrollbar-thumb:hover,
+body.light .wai-messages::-webkit-scrollbar-thumb:hover,
 body.light .session-container::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
-body.light #claude-session-select {
+body.light #wai-session-select {
   background: rgba(124, 58, 237, 0.06);
   color: #6D28D9;
   border-color: rgba(124, 58, 237, 0.15);
 }
 
-body.light #claude-session-select option {
+body.light #wai-session-select option {
   background: #ffffff;
   color: #1e293b;
 }
 
 /* Welcome */
-body.light .claude-welcome { color: #94a3b8; }
-body.light .claude-welcome h3 { color: #1e293b; }
+body.light .wai-welcome { color: #94a3b8; }
+body.light .wai-welcome h3 { color: #1e293b; }
 
 /* Bubbles */
-body.light .claude-message-assistant .claude-message-bubble {
+body.light .wai-message-assistant .wai-message-bubble {
   background: #ffffff;
   color: #1e293b;
   border-color: #e2e8f0;
 }
 
-body.light .claude-message-assistant .claude-message-bubble strong { color: #0f172a; }
-body.light .claude-message-assistant .claude-message-bubble em { color: #6D28D9; }
-body.light .claude-message-assistant .claude-message-bubble a { color: #7C3AED; }
-body.light .claude-message-assistant .claude-message-bubble a:hover { color: #6D28D9; }
-body.light .claude-message-assistant .claude-message-bubble h1,
-body.light .claude-message-assistant .claude-message-bubble h2,
-body.light .claude-message-assistant .claude-message-bubble h3,
-body.light .claude-message-assistant .claude-message-bubble h4 { color: #0f172a; }
+body.light .wai-message-assistant .wai-message-bubble strong { color: #0f172a; }
+body.light .wai-message-assistant .wai-message-bubble em { color: #6D28D9; }
+body.light .wai-message-assistant .wai-message-bubble a { color: #7C3AED; }
+body.light .wai-message-assistant .wai-message-bubble a:hover { color: #6D28D9; }
+body.light .wai-message-assistant .wai-message-bubble h1,
+body.light .wai-message-assistant .wai-message-bubble h2,
+body.light .wai-message-assistant .wai-message-bubble h3,
+body.light .wai-message-assistant .wai-message-bubble h4 { color: #0f172a; }
 
-body.light .claude-message-label { opacity: 0.8; }
-body.light .claude-message-assistant .claude-message-label { color: #0284c7; }
-body.light .claude-message-time { color: #94a3b8; }
+body.light .wai-message-label { opacity: 0.8; }
+body.light .wai-message-assistant .wai-message-label { color: #0284c7; }
+body.light .wai-message-time { color: #94a3b8; }
 
 /* Inline code */
-body.light .claude-message-bubble code:not(.claude-code-block code) {
+body.light .wai-message-bubble code:not(.wai-code-block code) {
   background: rgba(124, 58, 237, 0.08);
   color: #6D28D9;
 }
 
 /* Code blocks */
-body.light .claude-code-block {
+body.light .wai-code-block {
   background: #1e293b;
   border-color: #334155;
 }
 
-body.light .claude-code-header {
+body.light .wai-code-header {
   background: rgba(30, 41, 59, 0.8);
   color: #a78bfa;
 }
 
 /* Tool blocks */
-body.light .claude-tool-block {
+body.light .wai-tool-block {
   border-color: #e2e8f0;
   background: rgba(248, 249, 252, 0.8);
 }
 
-body.light .claude-tool-block summary { color: #64748b; }
-body.light .claude-tool-block summary::before { color: #94a3b8; }
-body.light .claude-tool-block summary:hover { background: rgba(124, 58, 237, 0.05); }
-body.light .claude-tool-label { color: #475569; }
-body.light .claude-tool-preview { color: #94a3b8; }
-body.light .claude-tool-lines { color: #94a3b8; }
-body.light .claude-tool-content { color: #475569; border-top-color: #e2e8f0; }
-body.light .claude-tool-block .claude-code-block { border-top-color: #334155; }
+body.light .wai-tool-block summary { color: #64748b; }
+body.light .wai-tool-block summary::before { color: #94a3b8; }
+body.light .wai-tool-block summary:hover { background: rgba(124, 58, 237, 0.05); }
+body.light .wai-tool-label { color: #475569; }
+body.light .wai-tool-preview { color: #94a3b8; }
+body.light .wai-tool-lines { color: #94a3b8; }
+body.light .wai-tool-content { color: #475569; border-top-color: #e2e8f0; }
+body.light .wai-tool-block .wai-code-block { border-top-color: #334155; }
 
 /* System message */
-body.light .claude-system-msg {
+body.light .wai-system-msg {
   color: #94a3b8;
   background: rgba(124, 58, 237, 0.03);
 }
 
 /* Context bar */
-body.light .claude-context-bar {
+body.light .wai-context-bar {
   background: #f1f5f9;
   border-top-color: #e2e8f0;
 }
 
-body.light .claude-context-meter { background: #e2e8f0; }
-body.light .claude-context-label { color: #94a3b8; }
+body.light .wai-context-meter { background: #e2e8f0; }
+body.light .wai-context-label { color: #94a3b8; }
 
 /* Input area */
-body.light .claude-input-area {
+body.light .wai-input-area {
   background: #f1f5f9;
   border-top-color: #e2e8f0;
 }
 
-body.light #claude-chat-input {
+body.light #wai-chat-input {
   background: #ffffff;
   border-color: #e2e8f0;
   color: #1e293b;
 }
 
-body.light #claude-chat-input::placeholder { color: #94a3b8; }
-body.light #claude-chat-input:focus { border-color: rgba(124, 58, 237, 0.5); }
+body.light #wai-chat-input::placeholder { color: #94a3b8; }
+body.light #wai-chat-input:focus { border-color: rgba(124, 58, 237, 0.5); }
 
 /* Input bottom */
-body.light .claude-tab-context { color: #94a3b8; }
-body.light .claude-input-action-btn { color: #94a3b8; }
-body.light .claude-input-action-btn:hover { color: #6D28D9; }
+body.light .wai-tab-context { color: #94a3b8; }
+body.light .wai-input-action-btn { color: #94a3b8; }
+body.light .wai-input-action-btn:hover { color: #6D28D9; }
 
 /* Copy button */
-body.light .claude-msg-copy-btn { color: #94a3b8; }
-body.light .claude-msg-copy-btn:hover { color: #6D28D9; }
-body.light .claude-code-copy { color: #94a3b8; }
-body.light .claude-code-copy:hover { color: #c4b5fd; }
+body.light .wai-msg-copy-btn { color: #94a3b8; }
+body.light .wai-msg-copy-btn:hover { color: #6D28D9; }
+body.light .wai-code-copy { color: #94a3b8; }
+body.light .wai-code-copy:hover { color: #c4b5fd; }
 
 /* Auth overlay */
-body.light .claude-auth-overlay { background: #f8f9fc; }
-body.light .claude-auth-card {
+body.light .wai-auth-overlay { background: #f8f9fc; }
+body.light .wai-auth-card {
   background: #ffffff;
   border-color: #e2e8f0;
 }
-body.light .claude-auth-title { color: #0f172a; }
-body.light .claude-auth-subtitle { color: #94a3b8; }
+body.light .wai-auth-title { color: #0f172a; }
+body.light .wai-auth-subtitle { color: #94a3b8; }
 
 /* User badge */
-body.light .claude-user-badge {
+body.light .wai-user-badge {
   background: rgba(124, 58, 237, 0.06);
   border-color: rgba(124, 58, 237, 0.15);
 }
-body.light .claude-user-badge-text { color: #6D28D9; }
+body.light .wai-user-badge-text { color: #6D28D9; }
 
 /* Attachments */
-body.light .claude-attachment-item {
+body.light .wai-attachment-item {
   background: rgba(124, 58, 237, 0.05);
   border-color: rgba(124, 58, 237, 0.12);
   color: #6D28D9;
 }
 
 /* Auto-exec status */
-body.light .claude-auto-exec-status {
+body.light .wai-auto-exec-status {
   background: rgba(124, 58, 237, 0.04);
 }
 
 /* Execute query button */
-body.light .claude-execute-query {
+body.light .wai-execute-query {
   background: rgba(124, 58, 237, 0.08);
   border-color: rgba(124, 58, 237, 0.2);
   color: #7C3AED;

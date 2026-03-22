@@ -118,12 +118,12 @@
   }
 
   function updateTabIndicator() {
-    let indicator = document.getElementById('claude-tab-indicator');
+    let indicator = document.getElementById('wai-tab-indicator');
     if (!indicator) {
       indicator = document.createElement('div');
-      indicator.id = 'claude-tab-indicator';
+      indicator.id = 'wai-tab-indicator';
       indicator.style.cssText = 'padding:4px 14px;font-size:11px;color:#64748b;background:rgba(124,58,237,0.05);border-bottom:1px solid rgba(124,58,237,0.1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;';
-      const header = document.getElementById('claude-panel-header');
+      const header = document.getElementById('wai-panel-header');
       header.parentNode.insertBefore(indicator, header.nextSibling);
     }
     let host = '';
@@ -132,7 +132,7 @@
     indicator.textContent = (host || currentTabInfo.title || 'No page') + '  ·  tab:' + (currentTabId || '?') + (sid ? '  ·  ' + sid.slice(0, 8) : '');
     indicator.title = (currentTabInfo.url || '') + '\nTab ID: ' + (currentTabId || '?') + (sid ? '\nSession: ' + sid : '');
 
-    const tabContextLabel = document.getElementById('claude-tab-context-label');
+    const tabContextLabel = document.getElementById('wai-tab-context-label');
     if (tabContextLabel) {
       const title = currentTabInfo.title || '';
       const label = host ? host + (title ? ' — ' + title : '') : title || 'No page';
@@ -184,6 +184,7 @@
     }
   }
 
+  var _skipModelRestore = false;
   function switchToSession(sessionId) {
     // Save state of current session
     saveActiveSessionState();
@@ -206,13 +207,17 @@
       renderAttachments();
       inputEl.disabled = false;
       inputEl.placeholder = 'Message...';
-      // Restore default model for new chats
-      chrome.storage.sync.get(['model'], (result) => {
-        if (result.model && modelSelect) {
-          modelSelect.value = result.model;
-          _prevModel = result.model;
-        }
-      });
+      // Restore default model for new chats (skip if model change triggered the clear)
+      if (_skipModelRestore) {
+        _skipModelRestore = false;
+      } else {
+        chrome.storage.sync.get(['model'], (result) => {
+          if (result.model && modelSelect) {
+            modelSelect.value = result.model;
+            _prevModel = result.model;
+          }
+        });
+      }
     } else {
       // Show session
       welcomeContainer.classList.remove('active');
@@ -340,7 +345,7 @@
         if (!sessions.has(s.id)) {
           // Create a container for this session (messages will be loaded lazily)
           const el = createSessionContainer(s.id);
-          el.innerHTML = '<div class="claude-welcome"><p style="color:#64748b;font-size:12px;">Chat: ' + escapeHtml(s.title || 'Untitled') + '</p><p style="color:#475569;font-size:11px;">Switch here to continue this chat</p></div>';
+          el.innerHTML = '<div class="wai-welcome"><p style="color:#64748b;font-size:12px;">Chat: ' + escapeHtml(s.title || 'Untitled') + '</p><p style="color:#475569;font-size:11px;">Switch here to continue this chat</p></div>';
           sessions.set(s.id, {
             el: el,
             history: [],
@@ -431,8 +436,8 @@
   // ---------------------------------------------------------------------------
   function getWelcomeHTML() {
     return `
-      <div class="claude-welcome">
-        <div class="claude-welcome-icon"><img src="../icons/wai-logo-text.svg" width="48" height="48" alt="wAi"></div>
+      <div class="wai-welcome">
+        <div class="wai-welcome-icon"><img src="../icons/wai-logo-text.svg" width="48" height="48" alt="wAi"></div>
         <h3>AI Web Assistant</h3>
         <p>Ask anything — Claude has full access to this page.</p>
       </div>`;
@@ -441,18 +446,18 @@
   // ---------------------------------------------------------------------------
   // Element references
   // ---------------------------------------------------------------------------
-  const sessionsWrapper = document.getElementById('claude-sessions-wrapper');
-  const inputEl = document.getElementById('claude-chat-input');
-  const sendBtn = document.getElementById('claude-send-btn');
-  const clearBtn = document.getElementById('claude-clear-btn');
-  const modelSelect = document.getElementById('claude-model-select');
-  const sessionSelect = document.getElementById('claude-session-select');
-  const contextFill = document.getElementById('claude-context-fill');
-  const contextLabel = document.getElementById('claude-context-label');
-  const compactBtn = document.getElementById('claude-compact-btn');
-  const uploadBtn = document.getElementById('claude-upload-btn');
-  const fileInput = document.getElementById('claude-file-input');
-  const attachmentsEl = document.getElementById('claude-attachments');
+  const sessionsWrapper = document.getElementById('wai-sessions-wrapper');
+  const inputEl = document.getElementById('wai-chat-input');
+  const sendBtn = document.getElementById('wai-send-btn');
+  const clearBtn = document.getElementById('wai-clear-btn');
+  const modelSelect = document.getElementById('wai-model-select');
+  const sessionSelect = document.getElementById('wai-session-select');
+  const contextFill = document.getElementById('wai-context-fill');
+  const contextLabel = document.getElementById('wai-context-label');
+  const compactBtn = document.getElementById('wai-compact-btn');
+  const uploadBtn = document.getElementById('wai-upload-btn');
+  const fileInput = document.getElementById('wai-file-input');
+  const attachmentsEl = document.getElementById('wai-attachments');
 
   // Create the welcome container (default view when no session is active)
   const welcomeContainer = document.createElement('div');
@@ -471,12 +476,12 @@
   });
 
   // Auth overlay elements
-  const authOverlay = document.getElementById('claude-auth-overlay');
-  const authError = document.getElementById('claude-auth-error');
-  const authSuccess = document.getElementById('claude-auth-success');
-  const authSubtitle = document.getElementById('claude-auth-subtitle');
-  const userBadge = document.getElementById('claude-user-badge');
-  const userBadgeText = document.getElementById('claude-user-badge-text');
+  const authOverlay = document.getElementById('wai-auth-overlay');
+  const authError = document.getElementById('wai-auth-error');
+  const authSuccess = document.getElementById('wai-auth-success');
+  const authSubtitle = document.getElementById('wai-auth-subtitle');
+  const userBadge = document.getElementById('wai-user-badge');
+  const userBadgeText = document.getElementById('wai-user-badge-text');
 
   // Load saved model preference (local cache, then sync from server after auth)
   chrome.storage.sync.get(['model'], (result) => {
@@ -511,7 +516,11 @@
         modelSelect.value = _prevModel;
         return;
       }
+      _skipModelRestore = true;
       clearChat();
+      // Force model select after any async resets
+      modelSelect.value = model;
+      setTimeout(function() { modelSelect.value = model; }, 100);
     }
 
     _prevModel = model;
@@ -771,7 +780,7 @@
     // Session selector only shows sessions from current browser tabs
   }
 
-  const userBalanceEl = document.getElementById('claude-user-balance');
+  const userBalanceEl = document.getElementById('wai-user-balance');
 
   function updateUserBadge() {
     if (!userBadge) return;
@@ -856,25 +865,25 @@
   }
 
   // Auth overlay event listeners
-  document.getElementById('claude-oauth-google')?.addEventListener('click', () => handleOAuth('google'));
-  document.getElementById('claude-oauth-apple')?.addEventListener('click', () => handleOAuth('apple'));
-  document.getElementById('claude-oauth-github')?.addEventListener('click', () => handleOAuth('github'));
+  document.getElementById('wai-oauth-google')?.addEventListener('click', () => handleOAuth('google'));
+  document.getElementById('wai-oauth-apple')?.addEventListener('click', () => handleOAuth('apple'));
+  document.getElementById('wai-oauth-github')?.addEventListener('click', () => handleOAuth('github'));
 
   // User menu toggle
-  var userMenu = document.getElementById('claude-user-menu');
+  var userMenu = document.getElementById('wai-user-menu');
   userBadge?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!userMenu) return;
     var isOpen = userMenu.style.display === 'block';
     userMenu.style.display = isOpen ? 'none' : 'block';
     // Set email in menu
-    var menuEmail = document.getElementById('claude-user-menu-email');
+    var menuEmail = document.getElementById('wai-user-menu-email');
     if (menuEmail && authState.user) menuEmail.textContent = authState.user.email || '';
   });
   // Close menu on outside click
   document.addEventListener('click', () => { if (userMenu) userMenu.style.display = 'none'; });
   // Sign out
-  document.getElementById('claude-user-menu-logout')?.addEventListener('click', () => {
+  document.getElementById('wai-user-menu-logout')?.addEventListener('click', () => {
     userMenu.style.display = 'none';
     showConfirm('Sign out?').then(function(ok) { if (ok) logout(); });
   });
@@ -1078,7 +1087,7 @@
 
     pendingAttachments.forEach((att, idx) => {
       const item = document.createElement('div');
-      item.className = 'claude-attachment-item';
+      item.className = 'wai-attachment-item';
 
       if (att.isImage) {
         const img = document.createElement('img');
@@ -1088,13 +1097,13 @@
       }
 
       const nameEl = document.createElement('span');
-      nameEl.className = 'claude-attachment-name';
+      nameEl.className = 'wai-attachment-name';
       nameEl.textContent = att.name;
       nameEl.title = att.name;
       item.appendChild(nameEl);
 
       const removeBtn = document.createElement('button');
-      removeBtn.className = 'claude-attachment-remove';
+      removeBtn.className = 'wai-attachment-remove';
       removeBtn.textContent = '\u00D7';
       removeBtn.title = 'Remove';
       removeBtn.addEventListener('click', () => {
@@ -1324,7 +1333,7 @@
       pendingAttachments = [];
       renderAttachments();
       getMessageQueue().push({ text, attachments: queuedAttachments });
-      const welcome = messagesEl.querySelector('.claude-welcome');
+      const welcome = messagesEl.querySelector('.wai-welcome');
       if (welcome) welcome.remove();
       addMessageToUI('user', text);
       scrollToBottom();
@@ -1385,7 +1394,7 @@
     }
 
     // Clear welcome message on first send
-    const welcome = messagesEl.querySelector('.claude-welcome');
+    const welcome = messagesEl.querySelector('.wai-welcome');
     if (welcome) welcome.remove();
 
     // Add user message to UI
@@ -1393,7 +1402,7 @@
     if (!alreadyShown) {
       const msgEl = addMessageToUI('user', text);
       if (atts.length > 0) {
-        const bubble = msgEl.querySelector('.claude-message-bubble');
+        const bubble = msgEl.querySelector('.wai-message-bubble');
         if (bubble) {
           const imgRow = document.createElement('div');
           imgRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;';
@@ -1689,7 +1698,7 @@
           if (log.length === 0) {
             addSystemMessage('Network log: No requests captured.');
           } else {
-            const w = messagesEl.querySelector('.claude-welcome');
+            const w = messagesEl.querySelector('.wai-welcome');
             if (w) w.remove();
             addMessageToUI('user', '/network');
             const contextStr = 'Network log (' + log.length + ' requests):\n' + JSON.stringify(log.slice(0, 50), null, 2);
@@ -1714,7 +1723,7 @@
           };
           const contextStr = 'Cookies for this page:\n' + JSON.stringify(combined, null, 2);
 
-          const w = messagesEl.querySelector('.claude-welcome');
+          const w = messagesEl.querySelector('.wai-welcome');
           if (w) w.remove();
           addMessageToUI('user', '/cookies');
           const userContent = '/cookies\n\n[Context: ' + contextStr + ']';
@@ -1754,7 +1763,7 @@
           }
           const contextStr = 'CDP ' + cdpMethod + ' result:\n' + JSON.stringify(res, null, 2);
 
-          const w = messagesEl.querySelector('.claude-welcome');
+          const w = messagesEl.querySelector('.wai-welcome');
           if (w) w.remove();
           addMessageToUI('user', '/cdp ' + arg);
           const userContent = '/cdp ' + arg + '\n\n[Context: ' + contextStr + ']';
@@ -1820,10 +1829,10 @@
     const session = sessions.get(targetSid);
     const streamText = session ? (session.streamText || '') + '\n\n' : '\n\n';
     if (session) session.streamText = streamText;
-    const bubble = msgEl.querySelector('.claude-message-bubble');
+    const bubble = msgEl.querySelector('.wai-message-bubble');
     if (bubble) {
       bubble.innerHTML = renderMarkdown(streamText) +
-        '<div class="claude-auto-exec-status">Executing step ' + iteration + '...</div>';
+        '<div class="wai-auto-exec-status">Executing step ' + iteration + '...</div>';
     }
     if (targetSid === activeSessionId) scrollToBottom();
   }
@@ -1835,7 +1844,7 @@
     const container = getSessionContainer(targetSid);
     const msgEl = container.querySelector('.streaming-msg');
     if (msgEl) {
-      const bubble = msgEl.querySelector('.claude-message-bubble');
+      const bubble = msgEl.querySelector('.wai-message-bubble');
       if (bubble) {
         bubble.innerHTML = renderMarkdown(streamText);
         attachCodeActions(bubble);
@@ -1895,7 +1904,7 @@
     if (msgEl) {
       msgEl.classList.remove('streaming-msg');
       if (fullText) {
-        const bubble = msgEl.querySelector('.claude-message-bubble');
+        const bubble = msgEl.querySelector('.wai-message-bubble');
         if (bubble) {
           bubble.innerHTML = renderMarkdown(fullText);
           attachCodeActions(bubble);
@@ -2197,7 +2206,7 @@
     if (streamingMsg) streamingMsg.remove();
 
     const errorEl = document.createElement('div');
-    errorEl.className = 'claude-error-msg';
+    errorEl.className = 'wai-error-msg';
     errorEl.innerHTML = ICONS.error + '<span>' + escapeHtml(error) + '</span>';
     container.appendChild(errorEl);
     if (targetSid === activeSessionId) scrollToBottom();
@@ -2222,7 +2231,7 @@
 
   function addSystemMessageToContainer(container, text) {
     const el = document.createElement('div');
-    el.className = 'claude-system-msg';
+    el.className = 'wai-system-msg';
     el.textContent = text;
     container.appendChild(el);
     if (container === messagesEl) scrollToBottom();
@@ -2230,15 +2239,15 @@
 
   function createMessageElement(role, text) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'claude-message claude-message-' + role;
+    wrapper.className = 'wai-message wai-message-' + role;
 
     const label = document.createElement('div');
-    label.className = 'claude-message-label';
+    label.className = 'wai-message-label';
     label.textContent = role === 'user' ? 'You' : 'AI';
     wrapper.appendChild(label);
 
     const bubble = document.createElement('div');
-    bubble.className = 'claude-message-bubble';
+    bubble.className = 'wai-message-bubble';
 
     if (role === 'user') {
       bubble.textContent = text;
@@ -2246,23 +2255,23 @@
       if (text) {
         bubble.innerHTML = renderMarkdown(text);
       } else {
-        bubble.innerHTML = '<div class="claude-typing"><div class="claude-typing-dot"></div><div class="claude-typing-dot"></div><div class="claude-typing-dot"></div></div>';
+        bubble.innerHTML = '<div class="wai-typing"><div class="wai-typing-dot"></div><div class="wai-typing-dot"></div><div class="wai-typing-dot"></div></div>';
       }
     }
 
     wrapper.appendChild(bubble);
 
     var timeEl = document.createElement('div');
-    timeEl.className = 'claude-message-time';
+    timeEl.className = 'wai-message-time';
     var now = new Date();
     timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     wrapper.appendChild(timeEl);
 
     if (role === 'assistant') {
       const actions = document.createElement('div');
-      actions.className = 'claude-message-actions';
+      actions.className = 'wai-message-actions';
       const copyMsgBtn = document.createElement('button');
-      copyMsgBtn.className = 'claude-msg-copy-btn';
+      copyMsgBtn.className = 'wai-msg-copy-btn';
       copyMsgBtn.title = 'Copy response';
       copyMsgBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
       copyMsgBtn.addEventListener('click', function () {
@@ -2287,8 +2296,8 @@
   // Code block actions
   // ---------------------------------------------------------------------------
   function attachCodeActions(bubble) {
-    bubble.querySelectorAll('.claude-code-block').forEach(function (block) {
-      const copyBtn = block.querySelector('.claude-code-copy');
+    bubble.querySelectorAll('.wai-code-block').forEach(function (block) {
+      const copyBtn = block.querySelector('.wai-code-copy');
       if (copyBtn && !copyBtn._bound) {
         copyBtn._bound = true;
         copyBtn.addEventListener('click', function () {
@@ -2303,12 +2312,12 @@
         });
       }
 
-      const header = block.querySelector('.claude-code-header');
+      const header = block.querySelector('.wai-code-header');
       const lang = header ? (header.textContent || '').trim().toLowerCase() : '';
-      if (lang.indexOf('query') !== -1 && !block.querySelector('.claude-execute-query')) {
+      if (lang.indexOf('query') !== -1 && !block.querySelector('.wai-execute-query')) {
         const code = block.querySelector('pre') ? block.querySelector('pre').textContent.trim() : '';
         const execBtn = document.createElement('button');
-        execBtn.className = 'claude-execute-query';
+        execBtn.className = 'wai-execute-query';
         execBtn.innerHTML = ICONS.highlight + ' Run Query';
         execBtn.addEventListener('click', async function () {
           const tabId = await getActiveTabId();
@@ -2321,7 +2330,7 @@
       }
     });
 
-    bubble.querySelectorAll('code:not(.claude-code-block code)').forEach(function (codeEl) {
+    bubble.querySelectorAll('code:not(.wai-code-block code)').forEach(function (codeEl) {
       const codeText = codeEl.textContent;
       if (/^[.#\[\w][\w\-.\[\]#:= >"'*+~,()]+$/.test(codeText) && codeText.length < 100) {
         if (!codeEl._bound) {
@@ -2351,21 +2360,21 @@
     html = html.replace(/---\n\*\*(CDP Result|JS Result|CDP Error|JS Error)\*\*[^\n]*\n```(?:\w*)\n([\s\S]*?)```/g, function (match, label, content) {
       const shortLabel = label.replace(' Result', '').replace(' Error', ' Err');
       const icon = label.includes('Error') ? '&#9888;' : '&#9889;';
-      const cls = label.includes('Error') ? 'claude-tool-error' : 'claude-tool-ok';
+      const cls = label.includes('Error') ? 'wai-tool-error' : 'wai-tool-ok';
       const preview = content.trim().substring(0, 60).replace(/\n/g, ' ');
-      return '<details class="claude-tool-block ' + cls + '"><summary>' +
-        '<span class="claude-tool-icon">' + icon + '</span> ' +
-        '<span class="claude-tool-label">' + escapeHtml(shortLabel) + '</span>' +
-        '<span class="claude-tool-preview">' + escapeHtml(preview) + (content.trim().length > 60 ? '...' : '') + '</span>' +
-        '</summary><pre class="claude-tool-content"><code>' + content.trim() + '</code></pre></details>';
+      return '<details class="wai-tool-block ' + cls + '"><summary>' +
+        '<span class="wai-tool-icon">' + icon + '</span> ' +
+        '<span class="wai-tool-label">' + escapeHtml(shortLabel) + '</span>' +
+        '<span class="wai-tool-preview">' + escapeHtml(preview) + (content.trim().length > 60 ? '...' : '') + '</span>' +
+        '</summary><pre class="wai-tool-content"><code>' + content.trim() + '</code></pre></details>';
     });
 
     html = html.replace(/---\n\*\*(CDP Error|JS Error)\*\*[^:]*:\s*([^\n]+)/g, function (match, label, errMsg) {
-      return '<details class="claude-tool-block claude-tool-error"><summary>' +
-        '<span class="claude-tool-icon">&#9888;</span> ' +
-        '<span class="claude-tool-label">' + label + '</span>' +
-        '<span class="claude-tool-preview">' + escapeHtml(errMsg.substring(0, 60)) + '</span>' +
-        '</summary><div class="claude-tool-content">' + escapeHtml(errMsg) + '</div></details>';
+      return '<details class="wai-tool-block wai-tool-error"><summary>' +
+        '<span class="wai-tool-icon">&#9888;</span> ' +
+        '<span class="wai-tool-label">' + label + '</span>' +
+        '<span class="wai-tool-preview">' + escapeHtml(errMsg.substring(0, 60)) + '</span>' +
+        '</summary><div class="wai-tool-content">' + escapeHtml(errMsg) + '</div></details>';
     });
 
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function (match, lang, code) {
@@ -2386,19 +2395,19 @@
           if (!summaryText) summaryText = 'JavaScript';
         }
 
-        return '<details class="claude-tool-block claude-tool-code"><summary>' +
-          '<span class="claude-tool-icon">&#9881;</span> ' +
-          '<span class="claude-tool-label">' + escapeHtml(summaryText) + '</span>' +
-          '<span class="claude-tool-lines">' + lines.length + ' line' + (lines.length > 1 ? 's' : '') + '</span>' +
-          '</summary><div class="claude-code-block"><div class="claude-code-header"><span>' +
+        return '<details class="wai-tool-block wai-tool-code"><summary>' +
+          '<span class="wai-tool-icon">&#9881;</span> ' +
+          '<span class="wai-tool-label">' + escapeHtml(summaryText) + '</span>' +
+          '<span class="wai-tool-lines">' + lines.length + ' line' + (lines.length > 1 ? 's' : '') + '</span>' +
+          '</summary><div class="wai-code-block"><div class="wai-code-header"><span>' +
           (lang || 'code') +
-          '</span><button class="claude-code-copy">Copy</button></div><pre><code>' +
+          '</span><button class="wai-code-copy">Copy</button></div><pre><code>' +
           highlighted + '</code></pre></div></details>';
       }
 
-      return '<div class="claude-code-block"><div class="claude-code-header"><span>' +
+      return '<div class="wai-code-block"><div class="wai-code-header"><span>' +
         (lang || 'code') +
-        '</span><button class="claude-code-copy">Copy</button></div><pre><code>' +
+        '</span><button class="wai-code-copy">Copy</button></div><pre><code>' +
         highlighted + '</code></pre></div>';
     });
 
@@ -2424,7 +2433,7 @@
     html = html.replace(/<p><\/p>/g, '');
     html = html.replace(/<p>(<h[1-4]>)/g, '$1');
     html = html.replace(/(<\/h[1-4]>)<\/p>/g, '$1');
-    html = html.replace(/<p>(<div class="claude-code-block">)/g, '$1');
+    html = html.replace(/<p>(<div class="wai-code-block">)/g, '$1');
     html = html.replace(/(<\/div>)<\/p>/g, '$1');
     html = html.replace(/<p>(<ul>)/g, '$1');
     html = html.replace(/(<\/ul>)<\/p>/g, '$1');

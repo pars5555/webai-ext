@@ -5,8 +5,8 @@
 (function () {
   'use strict';
 
-  if (window.__claudeWebAssistantInjected) return;
-  window.__claudeWebAssistantInjected = true;
+  if (window.__webaiInjected) return;
+  window.__webaiInjected = true;
 
   // ---------------------------------------------------------------------------
   // Gather page context (used by side panel before sending chat messages)
@@ -15,21 +15,21 @@
     let domContext = {};
     let pageData = {};
 
-    if (window.ClaudeDOMInspector) {
+    if (window.WebAIDOMInspector) {
       try {
-        domContext = window.ClaudeDOMInspector.getPageContext();
+        domContext = window.WebAIDOMInspector.getPageContext();
       } catch (e) {
         domContext = { error: e.message };
       }
     }
 
-    if (window.ClaudePageDataCollector) {
+    if (window.WebAIPageDataCollector) {
       try {
         pageData = {
-          cookies: window.ClaudePageDataCollector.getCookiesSummary(),
-          performance: window.ClaudePageDataCollector.getPerformanceData(),
-          network: window.ClaudePageDataCollector.getNetworkInfo(),
-          security: window.ClaudePageDataCollector.getSecurityInfo()
+          cookies: window.WebAIPageDataCollector.getCookiesSummary(),
+          performance: window.WebAIPageDataCollector.getPerformanceData(),
+          network: window.WebAIPageDataCollector.getNetworkInfo(),
+          security: window.WebAIPageDataCollector.getSecurityInfo()
         };
       } catch (e) {
         pageData = { error: e.message };
@@ -79,77 +79,77 @@
   function executeCommand(command, arg) {
     switch (command) {
       case '/dom': {
-        const ctx = window.ClaudeDOMInspector ? window.ClaudeDOMInspector.getPageContext() : {};
+        const ctx = window.WebAIDOMInspector ? window.WebAIDOMInspector.getPageContext() : {};
         return { context: 'Full page context:\n' + JSON.stringify(ctx, null, 2) };
       }
 
       case '/styles': {
         if (!arg) return { displayOnly: true, text: 'Usage: /styles <css-selector>' };
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const styles = window.ClaudeDOMInspector.getComputedStylesFor(arg);
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const styles = window.WebAIDOMInspector.getComputedStylesFor(arg);
         return { context: 'Computed styles for "' + arg + '":\n' + JSON.stringify(styles, null, 2) };
       }
 
       case '/errors': {
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const errors = window.ClaudeDOMInspector.getConsoleErrors();
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const errors = window.WebAIDOMInspector.getConsoleErrors();
         if (errors.length === 0) return { context: 'Console errors: None captured.' };
         return { context: 'Console errors:\n' + JSON.stringify(errors, null, 2) };
       }
 
       case '/select': {
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const sel = window.ClaudeDOMInspector.getSelectedText();
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const sel = window.WebAIDOMInspector.getSelectedText();
         if (!sel.text) return { displayOnly: true, text: 'No text selected. Select text on the page first.' };
         return { context: 'Selected text: "' + sel.text + '"\nContext: ' + sel.context };
       }
 
       case '/structure': {
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const structure = window.ClaudeDOMInspector.getPageStructure();
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const structure = window.WebAIDOMInspector.getPageStructure();
         return { context: 'Page DOM structure:\n' + structure };
       }
 
       case '/highlight': {
         if (!arg) return { error: 'Usage: /highlight <css-selector>' };
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const hlResult = window.ClaudeDOMInspector.highlightElement(arg);
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const hlResult = window.WebAIDOMInspector.highlightElement(arg);
         if (hlResult.error) return { error: hlResult.error };
         return { highlighted: hlResult.highlighted };
       }
 
       case '/query': {
         if (!arg) return { displayOnly: true, text: 'Usage: /query <javascript-expression>' };
-        if (!window.ClaudeDOMInspector) return { error: 'DOM Inspector not available.' };
-        const qResult = window.ClaudeDOMInspector.executeQuery(arg);
+        if (!window.WebAIDOMInspector) return { error: 'DOM Inspector not available.' };
+        const qResult = window.WebAIDOMInspector.executeQuery(arg);
         return { context: 'Query result for `' + arg + '`:\n' + JSON.stringify(qResult, null, 2), result: qResult };
       }
 
       case '/cookies': {
-        const cookies = window.ClaudePageDataCollector
-          ? window.ClaudePageDataCollector.getCookiesSummary()
+        const cookies = window.WebAIPageDataCollector
+          ? window.WebAIPageDataCollector.getCookiesSummary()
           : [];
         return { cookies: cookies, url: window.location.href };
       }
 
       case '/storage': {
-        if (!window.ClaudePageDataCollector) return { error: 'Page Data Collector not available.' };
+        if (!window.WebAIPageDataCollector) return { error: 'Page Data Collector not available.' };
         const storageData = {
-          localStorage: window.ClaudePageDataCollector.getLocalStorage(),
-          sessionStorage: window.ClaudePageDataCollector.getSessionStorage()
+          localStorage: window.WebAIPageDataCollector.getLocalStorage(),
+          sessionStorage: window.WebAIPageDataCollector.getSessionStorage()
         };
         return { context: 'Storage data:\n' + JSON.stringify(storageData, null, 2) };
       }
 
       case '/performance': {
-        if (!window.ClaudePageDataCollector) return { error: 'Page Data Collector not available.' };
-        const perfData = window.ClaudePageDataCollector.getPerformanceData();
+        if (!window.WebAIPageDataCollector) return { error: 'Page Data Collector not available.' };
+        const perfData = window.WebAIPageDataCollector.getPerformanceData();
         return { context: 'Performance data:\n' + JSON.stringify(perfData, null, 2) };
       }
 
       case '/sources': {
-        if (!window.ClaudePageDataCollector) return { error: 'Page Data Collector not available.' };
-        const sources = window.ClaudePageDataCollector.getPageSources();
+        if (!window.WebAIPageDataCollector) return { error: 'Page Data Collector not available.' };
+        const sources = window.WebAIPageDataCollector.getPageSources();
         return { context: 'Page sources:\n' + JSON.stringify(sources, null, 2) };
       }
 
