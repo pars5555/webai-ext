@@ -9,11 +9,14 @@
     "tabs",
     "debugger",
     "cookies",
-    "webRequest",
     "alarms",
     "sidePanel",
     "identity",
-    "clipboardWrite"
+    "clipboardWrite",
+    "history",
+    "sessions",
+    "notifications",
+    "webNavigation"
   ],
   "host_permissions": [
     "<all_urls>"

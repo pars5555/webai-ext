@@ -1400,6 +1400,23 @@
     chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: taskTabId || currentTabId }, () => {
       if (chrome.runtime.lastError) { /* ignore */ }
     });
+
+    // Kill backend process — it will resume on next message
+    var killSid = activeSessionId || chatSessionId;
+    if (killSid) {
+      fetch(SERVER_URL + '/api/chat/kill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sessionId: killSid }),
+      }).catch(function() {});
+    }
+
+    // CDP cleanup
+    var cleanupTab = taskTabId || currentTabId;
+    if (cleanupTab) {
+      chrome.runtime.sendMessage({ type: 'CDP_CLEANUP', tabId: cleanupTab });
+    }
+
     autoFollowUpCount = 0;
     taskTabId = null;
     session.isStreaming = false;
@@ -1979,6 +1996,14 @@
 
   function finishTask(targetSid) {
     autoFollowUpCount = 0;
+
+    // Clean up CDP: disable Fetch/Network, detach debugger (removes yellow bar)
+    // Auto-reattach happens on next CDP command if needed
+    var cleanupTabId = taskTabId || currentTabId;
+    if (cleanupTabId) {
+      chrome.runtime.sendMessage({ type: 'CDP_CLEANUP', tabId: cleanupTabId });
+    }
+
     taskTabId = null;
 
     // Update session state
@@ -2074,18 +2099,23 @@
             }
           }
 
-          const followUpPrompt = formatCdpResultsAsPrompt(cdpResults);
-          curHist.push({ role: 'user', content: followUpPrompt });
+          // Flush buffered CDP network events and append to results
+          var followUpPrompt = formatCdpResultsAsPrompt(cdpResults);
+          flushNetEvents(execTabId).then(function(netSummary) {
+            if (netSummary) followUpPrompt += '\n\n' + netSummary;
+            var curHist2 = getSessionHistory(targetSid);
+            curHist2.push({ role: 'user', content: followUpPrompt });
 
-          if (targetSid && sessions.has(targetSid)) {
-            sessions.get(targetSid).isStreaming = true;
-          }
-          if (targetSid === activeSessionId) {
-            isStreaming = true;
-            updateSendButton();
-          }
-          _stepSendTime = Date.now();
-          sendViaServerSSE(followUpPrompt, execTabId, 0, null, true, targetSid);
+            if (targetSid && sessions.has(targetSid)) {
+              sessions.get(targetSid).isStreaming = true;
+            }
+            if (targetSid === activeSessionId) {
+              isStreaming = true;
+              updateSendButton();
+            }
+            _stepSendTime = Date.now();
+            sendViaServerSSE(followUpPrompt, execTabId, 0, null, true, targetSid);
+          });
         } else {
           finishTask(targetSid);
         }
@@ -2117,10 +2147,13 @@
         try {
           const cmd = JSON.parse(rawCmd);
           const res = await handleExtInAutoExec(cmd);
-          results.push({ type: 'ext', action: cmd.action, result: JSON.stringify(res, null, 2).substring(0, 5000) });
-          if (res.tabId) {
-            tabId = res.tabId;
-            taskTabId = res.tabId;
+          const label = cmd.api || cmd.action || 'ext';
+          results.push({ type: 'ext', action: label, result: JSON.stringify(res, null, 2).substring(0, 5000) });
+          // Track tabId from result (works for both new and legacy format)
+          var resTabId = res.tabId || (res.result && res.result.tabId);
+          if (resTabId) {
+            tabId = resTabId;
+            taskTabId = resTabId;
           }
         } catch (e) {
           results.push({ type: 'ext_error', action: rawCmd.substring(0, 50), error: e.message });
@@ -2229,42 +2262,45 @@
   }
 
   async function handleExtInAutoExec(cmd) {
-    const action = (cmd.action || '').toLowerCase().replace(/[_\-\s]/g, '');
-    if (['switchtab', 'activatetab', 'focustab', 'activate', 'focus', 'selecttab'].includes(action)) {
-      const tid = cmd.tabId || cmd.id;
-      if (!tid) return { error: 'No tabId provided for ' + cmd.action };
-      const tabInfo = await new Promise(resolve => {
-        chrome.tabs.update(tid, { active: true }, (tab) => {
-          if (chrome.runtime.lastError) {
-            resolve({ error: chrome.runtime.lastError.message });
-          } else {
-            resolve({ tabId: tab.id, url: tab.url, title: tab.title, status: 'targeted' });
-          }
+    // New generic format: {"api": "chrome.tabs.query", "args": [{}]}
+    // Legacy format: {"action": "switchTab", "tabId": 123}
+    // Both are forwarded to background.js Chrome API bridge
+
+    // Special handling: switchTab enrichment (add page snapshot)
+    if (cmd.api === 'chrome.tabs.update' || (cmd.action && /switch|activate|focus/i.test(cmd.action))) {
+      var tid = cmd.args ? cmd.args[0] : (cmd.tabId || cmd.id);
+      var updateProps = cmd.args ? cmd.args[1] : { active: true };
+      if (tid && updateProps && updateProps.active) {
+        var tabInfo = await new Promise(function(resolve) {
+          chrome.tabs.update(tid, { active: true }, function(tab) {
+            if (chrome.runtime.lastError) {
+              resolve({ error: chrome.runtime.lastError.message });
+            } else {
+              resolve({ result: { tabId: tab.id, url: tab.url, title: tab.title, status: 'targeted' } });
+            }
+          });
         });
-      });
-      if (tabInfo.error) return tabInfo;
-      try {
-        const domRes = await sendCdpCommand(tid, 'Runtime.evaluate', {
-          expression: '(function(){ var t = document.title; var u = window.location.href; var text = (document.body && document.body.innerText || "").slice(0, 1000); return JSON.stringify({title: t, url: u, bodyText: text}); })()',
-          returnByValue: true,
-          awaitPromise: false,
-        });
-        if (domRes.status === 'ok' && domRes.result?.result?.value) {
-          try {
-            tabInfo.pageSnapshot = JSON.parse(domRes.result.result.value);
-          } catch (e) {
-            tabInfo.pageSnapshot = domRes.result.result.value;
+        if (tabInfo.error) return tabInfo;
+        try {
+          var domRes = await sendCdpCommand(tid, 'Runtime.evaluate', {
+            expression: '(function(){ var t = document.title; var u = window.location.href; var text = (document.body && document.body.innerText || "").slice(0, 1000); return JSON.stringify({title: t, url: u, bodyText: text}); })()',
+            returnByValue: true,
+            awaitPromise: false,
+          });
+          if (domRes.status === 'ok' && domRes.result?.result?.value) {
+            try { tabInfo.result.pageSnapshot = JSON.parse(domRes.result.result.value); } catch (e) {}
           }
-        }
-      } catch (e) { /* non-critical */ }
-      return tabInfo;
+        } catch (e) { /* non-critical */ }
+        return tabInfo;
+      }
     }
+
     return executeExtCommand(cmd);
   }
 
   function executeExtCommand(cmd) {
-    return new Promise(resolve => {
-      chrome.runtime.sendMessage({ type: 'EXT_COMMAND', ...cmd }, response => {
+    return new Promise(function(resolve) {
+      chrome.runtime.sendMessage({ type: 'EXT_COMMAND', ...cmd }, function(response) {
         if (chrome.runtime.lastError) {
           resolve({ error: chrome.runtime.lastError.message });
         } else {
@@ -2296,6 +2332,31 @@
       if (r.type === 'ext_error') return '\n\n---\n**Extension Error** (`' + r.action + '`): ' + r.error;
       return '';
     }).join('');
+  }
+
+  function flushNetEvents(tabId) {
+    return new Promise(function(resolve) {
+      chrome.runtime.sendMessage({ type: 'FLUSH_NET_EVENTS', tabId: tabId }, function(resp) {
+        if (!resp || !resp.events || resp.events.length === 0) { resolve(null); return; }
+        var evts = resp.events;
+        // Filter: skip images, fonts, stylesheets
+        var skipTypes = ['Image', 'Font', 'Stylesheet', 'Media'];
+        var filtered = evts.filter(function(e) { return skipTypes.indexOf(e.type) === -1; });
+        if (filtered.length === 0) { resolve(null); return; }
+        var lines = ['[Network Monitor — ' + filtered.length + ' request(s) captured]'];
+        for (var i = 0; i < filtered.length; i++) {
+          var e = filtered[i];
+          var size = e.size ? (e.size > 1024 ? (e.size / 1024).toFixed(1) + 'KB' : e.size + 'B') : '?';
+          var timing = e.timing ? e.timing + 'ms' : '';
+          var status = e.status || 'pending';
+          var postNote = e.hasPostData ? ' [has body]' : '';
+          lines.push((i + 1) + '. [' + e.requestId + '] ' + e.method + ' ' + e.url + ' (' + status + ', ' + size + (timing ? ', ' + timing : '') + ', ' + (e.mimeType || e.type || '') + ')' + postNote);
+        }
+        lines.push('');
+        lines.push('To inspect a request body: use CDP {"method": "Network.getResponseBody", "params": {"requestId": "ID"}} or {"method": "Network.getRequestPostData", "params": {"requestId": "ID"}}');
+        resolve(lines.join('\n'));
+      });
+    });
   }
 
   function formatCdpResultsAsPrompt(results) {

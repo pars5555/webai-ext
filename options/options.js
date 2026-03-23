@@ -190,12 +190,11 @@
   // ─── Render ──────────────────────────────────────────────────
 
   function renderSettings() {
-    elDevMode.checked = currentSettings.devMode;
-    // Only show dev mode section if already enabled
+    if (elDevMode) elDevMode.checked = currentSettings.devMode;
     var devSection = document.getElementById('dev-mode-section');
     if (devSection) devSection.style.display = currentSettings.devMode ? '' : 'none';
-    elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
-    elDevUserSelect.value = currentSettings.devUser;
+    if (elDevUserGroup) elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
+    if (elDevUserSelect) elDevUserSelect.value = currentSettings.devUser;
     elModelSelect.value = currentSettings.model;
     elThemeSelect.value = currentSettings.theme;
     applyTheme(currentSettings.theme);
@@ -209,18 +208,22 @@
   // ─── Bind Events ─────────────────────────────────────────────
 
   function bindEvents() {
-    elDevMode.addEventListener('change', () => {
-      currentSettings.devMode = elDevMode.checked;
-      elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
-      storageSet({ devMode: currentSettings.devMode });
-      showToast(currentSettings.devMode ? 'Dev mode ON — using localhost:3466' : 'Dev mode OFF — using production', 'success');
-    });
+    if (elDevMode) {
+      elDevMode.addEventListener('change', () => {
+        currentSettings.devMode = elDevMode.checked;
+        if (elDevUserGroup) elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
+        storageSet({ devMode: currentSettings.devMode });
+        showToast(currentSettings.devMode ? 'Dev mode ON — using localhost:3466' : 'Dev mode OFF — using production', 'success');
+      });
+    }
 
-    elDevUserSelect.addEventListener('change', () => {
-      currentSettings.devUser = elDevUserSelect.value;
-      storageSet({ devUser: currentSettings.devUser });
-      showToast('Dev user changed — reload sidepanel to apply', 'success');
-    });
+    if (elDevUserSelect) {
+      elDevUserSelect.addEventListener('change', () => {
+        currentSettings.devUser = elDevUserSelect.value;
+        storageSet({ devUser: currentSettings.devUser });
+        showToast('Dev user changed — reload sidepanel to apply', 'success');
+      });
+    }
 
     elModelSelect.addEventListener('change', () => {
       currentSettings.model = elModelSelect.value;

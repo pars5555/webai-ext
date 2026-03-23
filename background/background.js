@@ -1,15 +1,12 @@
 // background.js — Service worker for AI Web Assistant
-// Handles: CDP, cookies, network log, per-page toggle, OAuth
+// Handles: CDP, cookies, network log, per-page toggle, OAuth, navigation tracking
 
 const MODEL = 'claude-opus-4-6';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const activeStreams = new Map();       // tabId → AbortController
-const networkLogs = new Map();         // tabId → Array of request entries
-const MAX_NETWORK_LOG = 100;
 const attachedTabs = new Set();        // tabIds with debugger attached
-const tabSessions = new Map();         // tabId → { sessionId: UUID, messageCount: number }
+const cdpState = new Map();            // tabId → { network: bool, fetch: bool }
 
 // ─── Extension Logger ────────────────────────────────────────────────────────
 // Collects all logs in-memory so Claude can analyze them without asking the user
@@ -68,37 +65,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// ─── Network Request Logging ──────────────────────────────────────────────────
-
-chrome.webRequest.onCompleted.addListener(
-  (details) => {
-    const tabId = details.tabId;
-    if (tabId < 0) return;
-
-    if (!networkLogs.has(tabId)) {
-      networkLogs.set(tabId, []);
-    }
-
-    const log = networkLogs.get(tabId);
-    log.push({
-      url: details.url,
-      method: details.method,
-      status: details.statusCode,
-      type: details.type,
-      timestamp: details.timeStamp
-    });
-
-    if (log.length > MAX_NETWORK_LOG) {
-      log.splice(0, log.length - MAX_NETWORK_LOG);
-    }
-  },
-  { urls: ['<all_urls>'] }
-);
-
 chrome.tabs.onRemoved.addListener((tabId) => {
-  networkLogs.delete(tabId);
-  activeStreams.delete(tabId);
-  tabSessions.delete(tabId);
+  cdpState.delete(tabId);
+  tabNavTiming.delete(tabId);
 
   if (attachedTabs.has(tabId)) {
     attachedTabs.delete(tabId);
@@ -108,8 +77,98 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.debugger.onDetach.addListener((source) => {
   if (source.tabId) {
     attachedTabs.delete(source.tabId);
+    cdpState.delete(source.tabId);
+    cdpNetEvents.delete(source.tabId);
   }
 });
+
+// ─── CDP Network Event Capture ───────────────────────────────────────────────
+// Listens to all debugger events. When Network is enabled, captures request/response
+// metadata with requestIds so AI can later call getResponseBody/getRequestPostData.
+const cdpNetEvents = new Map();  // tabId → Array of {requestId, url, method, status, type, size, timing, timestamp}
+const MAX_CDP_NET_EVENTS = 200;
+
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  var tabId = source.tabId;
+  if (!tabId) return;
+  var st = cdpState.get(tabId);
+  if (!st || !st.network) return;
+
+  if (!cdpNetEvents.has(tabId)) cdpNetEvents.set(tabId, []);
+  var events = cdpNetEvents.get(tabId);
+
+  if (method === 'Network.requestWillBeSent') {
+    var req = params.request || {};
+    events.push({
+      requestId: params.requestId,
+      url: (req.url || '').substring(0, 500),
+      method: req.method || 'GET',
+      type: params.type || '',
+      hasPostData: req.hasPostData || false,
+      timestamp: Date.now(),
+      status: null,
+      mimeType: null,
+      size: null,
+      timing: null,
+    });
+    if (events.length > MAX_CDP_NET_EVENTS) events.splice(0, events.length - MAX_CDP_NET_EVENTS);
+  }
+
+  if (method === 'Network.responseReceived') {
+    var resp = params.response || {};
+    // Find matching request and update with response info
+    for (var i = events.length - 1; i >= 0; i--) {
+      if (events[i].requestId === params.requestId) {
+        events[i].status = resp.status;
+        events[i].mimeType = resp.mimeType || '';
+        events[i].size = resp.encodedDataLength || 0;
+        events[i].timing = resp.timing ? Math.round(resp.timing.receiveHeadersEnd || 0) : null;
+        break;
+      }
+    }
+  }
+
+  if (method === 'Network.loadingFinished') {
+    for (var i = events.length - 1; i >= 0; i--) {
+      if (events[i].requestId === params.requestId) {
+        events[i].size = params.encodedDataLength || events[i].size || 0;
+        events[i].done = true;
+        break;
+      }
+    }
+  }
+});
+
+// ─── webNavigation: track page load timing for AI context ────────────────────
+const tabNavTiming = new Map(); // tabId → {url, startTime, endTime}
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId === 0) {
+    tabNavTiming.set(details.tabId, { url: details.url, startTime: details.timeStamp, endTime: null });
+  }
+});
+
+chrome.webNavigation.onCompleted.addListener((details) => {
+  if (details.frameId === 0) {
+    var entry = tabNavTiming.get(details.tabId);
+    if (entry) entry.endTime = details.timeStamp;
+  }
+});
+
+// ─── notifications: notify when long AI tasks complete ───────────────────────
+function notifyTaskComplete(title, message) {
+  chrome.notifications.create('webai-task-' + Date.now(), {
+    type: 'basic',
+    iconUrl: 'icons/icon48.png',
+    title: title || 'AI Web Assistant',
+    message: message || 'Task completed',
+  });
+}
+
+// ─── sessions: recover recently closed tabs for AI ───────────────────────────
+function getRecentlyClosed(maxResults) {
+  return chrome.sessions.getRecentlyClosed({ maxResults: maxResults || 5 });
+}
 
 // ─── Message Router ───────────────────────────────────────────────────────────
 
@@ -119,7 +178,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   switch (message.type) {
     case 'CANCEL_STREAM':
-      handleCancelStream(tabId);
       sendResponse({ status: 'cancelled' });
       return true;
 
@@ -140,8 +198,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'GET_NETWORK_LOG':
-      handleGetNetworkLog(tabId, sendResponse);
+      // Legacy: return CDP-captured events instead
+      sendResponse({ status: 'ok', entries: cdpNetEvents.get(tabId) || [] });
       return true;
+
+    case 'FLUSH_NET_EVENTS': {
+      // Return and clear buffered CDP network events for this tab
+      var evts = cdpNetEvents.get(tabId) || [];
+      cdpNetEvents.set(tabId, []);
+      sendResponse({ events: evts });
+      return true;
+    }
 
     case 'GET_PAGE_SOURCES':
       handleGetPageSources(tabId, sendResponse);
@@ -175,15 +242,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ logs: getRecentLogs(message.count || 50) });
       return true;
 
-    case 'CLEAR_SESSION': {
-      const sid = tabSessions.get(tabId);
-      if (sid) {
-        xlog('INFO', 'SESSION', 'Clearing session for tab:', tabId, 'session:', sid.sessionId);
-        tabSessions.delete(tabId);
-      }
+    case 'GET_NAV_TIMING':
+      sendResponse({ timing: tabNavTiming.get(tabId) || null });
+      return true;
+
+    case 'GET_RECENTLY_CLOSED':
+      getRecentlyClosed(message.maxResults || 5).then(sessions => {
+        sendResponse({ sessions });
+      });
+      return true;
+
+    case 'NOTIFY':
+      notifyTaskComplete(message.title, message.message);
       sendResponse({ status: 'ok' });
       return true;
+
+    case 'GET_CDP_STATE':
+      sendResponse({ state: cdpState.get(tabId) || { network: false, fetch: false }, attached: attachedTabs.has(tabId) });
+      return true;
+
+    case 'CDP_CLEANUP': {
+      // Disable Fetch (page freeze safety), optionally disable Network, then detach
+      const st = cdpState.get(tabId) || { network: false, fetch: false };
+      (async () => {
+        try {
+          if (st.fetch && attachedTabs.has(tabId)) {
+            await chrome.debugger.sendCommand({ tabId }, 'Fetch.disable', {});
+            st.fetch = false;
+          }
+          if (st.network && attachedTabs.has(tabId)) {
+            await chrome.debugger.sendCommand({ tabId }, 'Network.disable', {});
+            st.network = false;
+          }
+          cdpState.set(tabId, st);
+          if (attachedTabs.has(tabId)) {
+            await chrome.debugger.detach({ tabId });
+            attachedTabs.delete(tabId);
+          }
+          cdpState.delete(tabId);
+          sendResponse({ status: 'ok', detached: true });
+        } catch (e) {
+          attachedTabs.delete(tabId);
+          cdpState.delete(tabId);
+          sendResponse({ status: 'ok', error: e.message });
+        }
+      })();
+      return true;
     }
+
+    case 'CLEAR_SESSION':
+      sendResponse({ status: 'ok' });
+      return true;
 
     case 'RESET_ALL':
       chrome.storage.sync.clear(() => {
@@ -313,16 +422,6 @@ async function handleOAuthFlow(message, sendResponse) {
 
 // ─── Stream Cancel ───────────────────────────────────────────────────────────
 
-function handleCancelStream(tabId) {
-  const stream = activeStreams.get(tabId);
-  if (!stream) return;
-
-  if (stream.abort) {
-    stream.abort(); // AbortController
-  }
-  activeStreams.delete(tabId);
-}
-
 // ─── CDP (Chrome DevTools Protocol) ───────────────────────────────────────────
 
 async function handleCdpAttach(tabId, sendResponse) {
@@ -359,6 +458,19 @@ async function handleCdpCommand(message, tabId, sendResponse) {
       attachedTabs.add(tabId);
     }
     const result = await chrome.debugger.sendCommand({ tabId }, message.method, message.params || {});
+
+    // Track Network/Fetch state per tab
+    var method = message.method;
+    if (method === 'Network.enable' || method === 'Network.disable' ||
+        method === 'Fetch.enable' || method === 'Fetch.disable') {
+      var state = cdpState.get(tabId) || { network: false, fetch: false };
+      if (method === 'Network.enable') state.network = true;
+      if (method === 'Network.disable') state.network = false;
+      if (method === 'Fetch.enable') state.fetch = true;
+      if (method === 'Fetch.disable') state.fetch = false;
+      cdpState.set(tabId, state);
+    }
+
     sendResponse({ status: 'ok', result });
   } catch (error) {
     sendResponse({ status: 'error', error: error.message || `CDP "${message.method}" failed` });
@@ -382,11 +494,6 @@ async function handleGetCookies(message, sendResponse) {
   } catch (error) {
     sendResponse({ status: 'error', error: error.message });
   }
-}
-
-function handleGetNetworkLog(tabId, sendResponse) {
-  if (!tabId) { sendResponse({ status: 'error', error: 'No tab ID' }); return; }
-  sendResponse({ status: 'ok', entries: networkLogs.get(tabId) || [] });
 }
 
 async function handleGetPageSources(tabId, sendResponse) {
@@ -421,108 +528,123 @@ async function handleGetPageSources(tabId, sendResponse) {
   }
 }
 
-// ─── Extension Commands (from AI ```ext blocks) ────────────────────────────────
+// ─── Chrome API Bridge (from AI ```ext blocks) ─────────────────────────────────
+// Generic bridge: AI sends {"api": "chrome.tabs.query", "args": [{}]}
+// Extension resolves the API path and calls it with the provided args.
+
+// Block only dangerous APIs that could break the extension or cause harm
+const CHROME_API_BLOCKLIST = new Set([
+  'chrome.runtime.reload',            // would restart the extension mid-session
+  'chrome.runtime.sendMessage',        // could create message loops
+  'chrome.runtime.sendNativeMessage',  // native messaging — not needed
+  'chrome.management.uninstallSelf',   // self-destruct
+  'chrome.management.setEnabled',      // disable other extensions
+  'chrome.browsingData.remove',        // wipe browsing data
+  'chrome.browsingData.removeHistory', // wipe history
+  'chrome.browsingData.removeCookies', // wipe all cookies
+  'chrome.browsingData.removeCache',   // wipe cache
+]);
 
 function handleExtCommand(message, sendResponse) {
-  const action = message.action;
-  xlog('DEBUG', 'EXT_CMD', 'action:', action);
-
-  // Normalize action name — AI hallucinates variants
-  const normalized = action.toLowerCase().replace(/[_\-\s]/g, '');
-
-  // List tabs
-  if (['listtabs', 'gettabs', 'tabs', 'getalltabs', 'tablist'].includes(normalized)) {
-    chrome.tabs.query({}, (tabs) => {
-      sendResponse({
-        tabs: tabs.map(t => ({
-          tabId: t.id,
-          url: t.url || '',
-          title: t.title || '',
-          active: t.active,
-          windowId: t.windowId,
-        }))
-      });
-    });
+  // New generic format: {"api": "chrome.tabs.query", "args": [{}]}
+  if (message.api) {
+    handleChromeApiBridge(message, sendResponse);
     return;
   }
 
-  // Switch/activate tab
-  if (['switchtab', 'activatetab', 'focustab', 'activate', 'focus', 'selecttab'].includes(normalized)) {
-    const tid = message.tabId || message.id;
-    if (!tid) { sendResponse({ error: 'No tabId provided' }); return; }
-    chrome.tabs.update(tid, { active: true }, (tab) => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ error: chrome.runtime.lastError.message });
-      } else {
-        chrome.windows.update(tab.windowId, { focused: true }, () => {
-          sendResponse({ tabId: tab.id, url: tab.url, title: tab.title });
-        });
+  // Legacy format: {"action": "listTabs"} — translate to new format
+  if (message.action) {
+    const legacy = translateLegacyAction(message);
+    if (legacy) {
+      handleChromeApiBridge(legacy, sendResponse);
+    } else {
+      sendResponse({ error: 'Unknown legacy action: "' + message.action + '". Use new format: {"api": "chrome.tabs.query", "args": [{}]}' });
+    }
+    return;
+  }
+
+  sendResponse({ error: 'Invalid ext block. Use: {"api": "chrome.tabs.query", "args": [{}]}' });
+}
+
+function translateLegacyAction(message) {
+  const n = (message.action || '').toLowerCase().replace(/[_\-\s]/g, '');
+  if (['listtabs', 'gettabs', 'tabs', 'getalltabs', 'tablist'].includes(n))
+    return { api: 'chrome.tabs.query', args: [{}] };
+  if (['switchtab', 'activatetab', 'focustab'].includes(n))
+    return { api: 'chrome.tabs.update', args: [message.tabId || message.id, { active: true }] };
+  if (['createtab', 'newtab', 'opentab', 'open'].includes(n))
+    return { api: 'chrome.tabs.create', args: [{ url: message.url || 'about:blank', active: message.active !== false }] };
+  if (['closetab', 'removetab', 'close'].includes(n))
+    return { api: 'chrome.tabs.remove', args: [message.tabId || message.id] };
+  if (['screenshot', 'takescreenshot', 'capturescreenshot'].includes(n))
+    return { api: 'chrome.tabs.captureVisibleTab', args: [null, { format: 'jpeg', quality: 60 }] };
+  return null;
+}
+
+async function handleChromeApiBridge(message, sendResponse) {
+  const apiPath = message.api;
+  const args = message.args || [];
+
+  xlog('DEBUG', 'CHROME_API', apiPath, JSON.stringify(args).substring(0, 200));
+
+  // Block dangerous APIs only
+  if (CHROME_API_BLOCKLIST.has(apiPath)) {
+    sendResponse({ error: 'API blocked for safety: "' + apiPath + '"' });
+    return;
+  }
+
+  // Must start with chrome.
+  if (!apiPath.startsWith('chrome.')) {
+    sendResponse({ error: 'API path must start with "chrome.": "' + apiPath + '"' });
+    return;
+  }
+
+  // Auto-resolve relative paths in notifications iconUrl
+  if (apiPath === 'chrome.notifications.create' || apiPath === 'chrome.notifications.update') {
+    var optIdx = apiPath === 'chrome.notifications.create' ? 1 : 1;
+    var opts = args[optIdx];
+    if (opts && opts.iconUrl && !opts.iconUrl.startsWith('http') && !opts.iconUrl.startsWith('data:') && !opts.iconUrl.startsWith('chrome-extension://')) {
+      opts.iconUrl = chrome.runtime.getURL(opts.iconUrl);
+    }
+  }
+
+  // Resolve the function from chrome object
+  const parts = apiPath.replace(/^chrome\./, '').split('.');
+  let fn = chrome;
+  let parent = chrome;
+  for (let i = 0; i < parts.length; i++) {
+    parent = fn;
+    fn = fn[parts[i]];
+    if (fn === undefined) {
+      sendResponse({ error: 'API not available: "' + apiPath + '" — "' + parts[i] + '" is undefined. Check manifest permissions.' });
+      return;
+    }
+  }
+
+  if (typeof fn !== 'function') {
+    sendResponse({ error: '"' + apiPath + '" is not a function (type: ' + typeof fn + ')' });
+    return;
+  }
+
+  try {
+    // MV3: all chrome.* APIs return promises when no callback is passed
+    const result = await fn.apply(parent, args);
+
+    // Truncate large results (e.g. screenshots, MHTML)
+    let serialized;
+    try {
+      serialized = JSON.stringify(result);
+      if (serialized && serialized.length > 50000) {
+        serialized = serialized.substring(0, 50000);
+        sendResponse({ result: JSON.parse(serialized + '"}'), _truncated: true });
+        return;
       }
-    });
-    return;
-  }
+    } catch (e) { /* non-serializable, handled below */ }
 
-  // Create tab
-  if (['createtab', 'newtab', 'opentab', 'open'].includes(normalized)) {
-    chrome.tabs.create({ url: message.url || 'about:blank', active: message.active !== false }, (tab) => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ error: chrome.runtime.lastError.message });
-      } else {
-        sendResponse({ tabId: tab.id, url: tab.url, title: tab.title });
-      }
-    });
-    return;
+    sendResponse({ result: result });
+  } catch (e) {
+    sendResponse({ error: e.message || 'API call failed' });
   }
-
-  // Close tab
-  if (['closetab', 'removetab', 'close'].includes(normalized)) {
-    const tid = message.tabId || message.id;
-    if (!tid) { sendResponse({ error: 'No tabId provided' }); return; }
-    chrome.tabs.remove(tid, () => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ error: chrome.runtime.lastError.message });
-      } else {
-        sendResponse({ ok: true });
-      }
-    });
-    return;
-  }
-
-  // Screenshot — AI sometimes puts this in ext block instead of cdp
-  if (['screenshot', 'takescreenshot', 'capturescreenshot', 'pagecapturescreenshot'].includes(normalized)) {
-    const tid = message.tabId || message.id;
-    if (!tid) { sendResponse({ error: 'No tabId provided for screenshot' }); return; }
-    (async () => {
-      try {
-        if (!attachedTabs.has(tid)) {
-          await chrome.debugger.attach({ tabId: tid }, '1.3');
-          attachedTabs.add(tid);
-        }
-        const result = await chrome.debugger.sendCommand({ tabId: tid }, 'Page.captureScreenshot', message.params || { format: 'jpeg', quality: 60 });
-        sendResponse({ data: result.data, note: 'Screenshot captured. Prefer DOM reading for text content.' });
-      } catch (e) {
-        sendResponse({ error: e.message || 'Screenshot failed' });
-      }
-    })();
-    return;
-  }
-
-  // Help — return valid actions so AI can self-correct with format examples
-  sendResponse({
-    error: 'Unknown ext action: "' + action + '". ext blocks are ONLY for tab management.',
-    validExtActions: ['listTabs', 'switchTab {tabId}', 'createTab {url}', 'closeTab {tabId}', 'screenshot {tabId}'],
-    hint: 'To run JavaScript, use a ```js block. To use CDP commands (click, type, evaluate, navigate), use a ```cdp block with format: {"method": "Runtime.evaluate", "params": {"expression": "..."}}. To click: {"method": "Input.dispatchMouseEvent", "params": {"type": "mousePressed", "x": 100, "y": 200, "button": "left", "clickCount": 1}}'
-  });
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
-
-function sendToTab(tabId, message) {
-  message.tabId = tabId;
-  chrome.tabs.sendMessage(tabId, message).catch(() => {});
-  chrome.runtime.sendMessage(message).catch(() => {});
-
-  if (message.type === 'STREAM_END' && message.fullText && !message.cancelled) {
-    pushChatLog({ role: 'assistant', tabId, content: message.fullText });
-  }
-}
