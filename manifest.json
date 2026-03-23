@@ -5,7 +5,6 @@
   "description": "AI-powered browser assistant. Chat with Claude and Gemini AI to get help with any webpage.",
   "permissions": [
     "activeTab",
-    "scripting",
     "storage",
     "tabs",
     "debugger",
