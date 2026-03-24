@@ -2421,6 +2421,14 @@
             }
           }
 
+          // Check if tab still exists before continuing
+          chrome.tabs.get(execTabId, function(tab) {
+            if (chrome.runtime.lastError || !tab) {
+              addSystemMessageToContainer(container, 'Tab closed — stopping.');
+              finishTask(targetSid);
+              return;
+            }
+
           // Flush buffered CDP network events and append to results
           var formatted = formatCdpResultsAsPrompt(cdpResults);
           var followUpText = formatted.text;
@@ -2440,6 +2448,7 @@
             _stepSendTime = Date.now();
             sendViaServerSSE(followUpText, execTabId, 0, null, true, targetSid, followUpImages);
           });
+          }); // end chrome.tabs.get
         } else {
           finishTask(targetSid);
         }
@@ -2617,7 +2626,7 @@
         var captchaIcons = {
           'recaptcha_v2': 'https://upload.wikimedia.org/wikipedia/commons/a/ad/RecaptchaLogo.svg',
           'recaptcha': 'https://upload.wikimedia.org/wikipedia/commons/a/ad/RecaptchaLogo.svg',
-          'hcaptcha': 'https://www.hcaptcha.com/favicon.ico',
+          'hcaptcha': chrome.runtime.getURL('icons/captcha-hcaptcha.svg'),
           'turnstile': 'https://www.cloudflare.com/favicon.ico',
           'slide': 'https://static.geetest.com/static/icons/geetest.ico',
           'funcaptcha': 'https://www.arkoselabs.com/favicon.ico',
