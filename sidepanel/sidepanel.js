@@ -2617,9 +2617,9 @@
           'recaptcha': 'captcha-recaptcha-v2',
           'hcaptcha': 'captcha-hcaptcha',
           'turnstile': 'captcha-turnstile',
-          'slide': 'captcha-slide',
-          'geetest': 'captcha-slide',
-          'geetest_slide': 'captcha-slide',
+          'slide': 'captcha-geetest',
+          'geetest': 'captcha-geetest',
+          'geetest_slide': 'captcha-geetest',
           'funcaptcha': 'captcha-funcaptcha',
           'datadome': 'captcha-datadome',
         };
