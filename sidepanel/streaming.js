@@ -245,6 +245,8 @@ async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isE
       var errorData = await response.json().catch(function () { return {}; });
       var status = response.status;
 
+      reportError('CHAT_API', 'HTTP ' + status + ': ' + (errorData.error || errorData.message || 'Server error'));
+
       if (status === 401 && retryCount < 1) {
         var refreshed = await refreshAccessToken();
         if (refreshed) {
@@ -333,6 +335,7 @@ async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isE
             onStreamEnd(finalText, false, targetSid);
             streamEnded = true;
           } else if (event.type === 'error') {
+            reportError('CHAT_API', 'SSE error event: ' + (event.error || event.message || 'Stream error'));
             onStreamError(event.error || event.message || 'Stream error', targetSid);
             streamEnded = true;
           }
@@ -360,6 +363,7 @@ async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isE
       onStreamEnd(streamText, true, targetSid);
     } else {
       var errMsg = error.message || 'Unknown error';
+      reportError('CHAT_API', 'Fetch error: ' + errMsg);
       if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError') || errMsg.includes('ERR_CONNECTION_REFUSED')) {
         errMsg = 'Cannot connect to server at ' + SERVER_URL + '. Is the server running?';
       }
@@ -617,6 +621,23 @@ function finishTask(targetSid) {
       return;
     }
   }
+
+  // Notify if user is on a different tab
+  chrome.storage.sync.get(['notifyOnFinish'], function (result) {
+    if (!result.notifyOnFinish) return;
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      var activeTab = tabs[0];
+      var sessionTabId = targetSid && sessions.has(targetSid) ? sessions.get(targetSid).tabId : currentTabId;
+      if (activeTab && activeTab.id !== sessionTabId) {
+        chrome.runtime.sendMessage({
+          type: 'NOTIFY',
+          title: 'Task finished',
+          message: (sessions.has(targetSid) ? sessions.get(targetSid).title || '' : '').substring(0, 80) || 'AI response complete',
+          tabId: sessionTabId
+        });
+      }
+    });
+  });
 
   inputEl.focus();
   processQueue();

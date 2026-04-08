@@ -48,6 +48,23 @@ var currentTabId = null;
 var currentTabInfo = { url: '', title: '' };
 var _stepSendTime = 0;
 
+// ---------------------------------------------------------------------------
+// Global error reporter — sends errors to background for admin logging
+// ---------------------------------------------------------------------------
+function reportError(category, msg) {
+  try {
+    chrome.runtime.sendMessage({ type: 'LOG_ERROR', level: 'error', category: category, message: String(msg) });
+  } catch (e) { console.error('[reportError]', e); }
+}
+
+window.onerror = function(msg, url, line, col, err) {
+  reportError('JS_ERROR', (err && err.stack) || (msg + ' at ' + url + ':' + line));
+};
+
+window.onunhandledrejection = function(e) {
+  reportError('PROMISE_ERROR', (e.reason && e.reason.stack) || String(e.reason));
+};
+
 var SERVER_URL = 'https://webai.pc.am';
 var authState = {
   accessToken: null,

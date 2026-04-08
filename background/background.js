@@ -49,10 +49,6 @@ function pushToAdmin(path, data) {
   } catch (e) { /* ignore */ }
 }
 
-function pushChatLog(entry) {
-  pushToAdmin('/api/logs/chat', entry);
-}
-
 // ─── Service Worker Keep-Alive ────────────────────────────────────────────────
 // MV3 service workers die after ~5min of inactivity. Use chrome.alarms to
 // keep alive while any session is active.
@@ -156,14 +152,32 @@ chrome.webNavigation.onCompleted.addListener((details) => {
 });
 
 // ─── notifications: notify when long AI tasks complete ───────────────────────
-function notifyTaskComplete(title, message) {
-  chrome.notifications.create('webai-task-' + Date.now(), {
+var _notifyTabMap = {};
+
+function notifyTaskComplete(title, message, tabId) {
+  var notifId = 'webai-task-' + Date.now();
+  if (tabId) _notifyTabMap[notifId] = tabId;
+  chrome.notifications.create(notifId, {
     type: 'basic',
-    iconUrl: 'icons/icon48.png',
+    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
     title: title || 'AI Web Assistant',
     message: message || 'Task completed',
   });
 }
+
+chrome.notifications.onClicked.addListener(function (notifId) {
+  var tabId = _notifyTabMap[notifId];
+  delete _notifyTabMap[notifId];
+  chrome.notifications.clear(notifId);
+  if (tabId) {
+    chrome.tabs.update(tabId, { active: true }, function () {
+      if (chrome.runtime.lastError) return;
+      chrome.windows.getCurrent(function (win) {
+        if (win) chrome.windows.update(win.id, { focused: true });
+      });
+    });
+  }
+});
 
 // ─── sessions: recover recently closed tabs for AI ───────────────────────────
 function getRecentlyClosed(maxResults) {
@@ -253,7 +267,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'NOTIFY':
-      notifyTaskComplete(message.title, message.message);
+      notifyTaskComplete(message.title, message.message, message.tabId);
       sendResponse({ status: 'ok' });
       return true;
 
@@ -395,6 +409,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return true;
 
+    case 'LOG_ERROR':
+      xlog(message.level || 'error', message.category || 'SIDEPANEL', message.message || 'Unknown error');
+      sendResponse({ status: 'ok' });
+      return true;
+
     default:
       return false;
   }
@@ -415,10 +434,12 @@ async function handleOAuthFlow(message, sendResponse) {
       { url: fullUrl, interactive: true },
       (callbackUrl) => {
         if (chrome.runtime.lastError) {
+          xlog('error', 'OAUTH', 'launchWebAuthFlow error:', chrome.runtime.lastError.message);
           sendResponse({ error: chrome.runtime.lastError.message });
           return;
         }
         if (!callbackUrl) {
+          xlog('error', 'OAUTH', 'OAuth flow cancelled by user');
           sendResponse({ error: 'OAuth flow was cancelled' });
           return;
         }
@@ -434,14 +455,17 @@ async function handleOAuthFlow(message, sendResponse) {
           if (accessToken) {
             sendResponse({ accessToken, refreshToken, user });
           } else {
+            xlog('error', 'OAUTH', 'No access token in callback URL');
             sendResponse({ error: 'No access token received from OAuth' });
           }
         } catch (e) {
+          xlog('error', 'OAUTH', 'Failed to parse callback:', e.message);
           sendResponse({ error: 'Failed to parse OAuth callback: ' + e.message });
         }
       }
     );
   } catch (e) {
+    xlog('error', 'OAUTH', 'OAuth flow exception:', e.message);
     sendResponse({ error: 'OAuth error: ' + e.message });
   }
 }
@@ -458,6 +482,7 @@ async function handleCdpAttach(tabId, sendResponse) {
     attachedTabs.add(tabId);
     sendResponse({ status: 'ok' });
   } catch (error) {
+    xlog('error', 'CDP', 'Attach failed for tab', tabId, ':', error.message);
     sendResponse({ status: 'error', error: error.message || 'Failed to attach debugger' });
   }
 }
@@ -499,6 +524,7 @@ async function handleCdpCommand(message, tabId, sendResponse) {
 
     sendResponse({ status: 'ok', result });
   } catch (error) {
+    xlog('error', 'CDP', 'Command failed:', message.method, 'tab:', tabId, error.message);
     sendResponse({ status: 'error', error: error.message || `CDP "${message.method}" failed` });
   }
 }

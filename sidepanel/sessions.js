@@ -314,7 +314,7 @@ async function loadUserSessions() {
       loadSessionMessages(s.id, el);
     }
     updateSessionSelector();
-  } catch (e) { /* silent */ }
+  } catch (e) { reportError('SESSIONS', 'loadUserSessions failed: ' + (e.message || e)); }
 }
 
 async function loadSessionMessages(sessionId, container) {
@@ -343,7 +343,7 @@ async function loadSessionMessages(sessionId, container) {
       session.history = history;
       session.loaded = true;
     }
-  } catch (e) { /* silent */ }
+  } catch (e) { reportError('SESSIONS', 'loadSessionMessages failed for ' + sessionId + ': ' + (e.message || e)); }
 }
 
 // ---------------------------------------------------------------------------

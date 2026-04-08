@@ -97,6 +97,41 @@ Admin creates security prompt in DB
               -> AI outputs PoC scripts (non-auto-exec)
 ```
 
+### SEO Auditor Prompt
+
+A comprehensive SEO audit mode. When selected, the AI automatically performs a full 8-step audit of the current page:
+
+1. **Page Fundamentals** — title, meta description, canonical, OG/Twitter tags, JSON-LD, favicon
+2. **Heading Structure** — h1-h6 hierarchy, count, keyword presence
+3. **Content Analysis** — word count, keyword density, image alt text, link count, content-to-HTML ratio
+4. **Technical SEO** — Core Web Vitals (TTFB, FCP, LCP, CLS), DOM size, URL structure, SSL
+5. **Mobile & Accessibility** — viewport, touch targets, font sizes, color contrast, ARIA, form labels
+6. **Links & Navigation** — internal/external/nofollow counts, broken links, link text quality, breadcrumbs
+7. **External Checks** — robots.txt, sitemap.xml, HTTP headers (via webfetch)
+8. **Social & Rich Results** — Open Graph, Twitter Card, JSON-LD validation
+
+Outputs a structured report with a score out of 100 (broken into 4 categories of /25), critical issues with exact fixes, warnings, and prioritized recommendations.
+
+**Setup:** Create a prompt with `type = 'seo'` in admin panel, grant users access. All users have `seo` access by default.
+
+**Usage:** Select "SEO Audit" from the prompt dropdown, navigate to any page, type "audit this page".
+
+## Error Reporting
+
+All errors are captured and sent to the server's admin logging system for real-time monitoring.
+
+| Source | Mechanism | Category |
+|---|---|---|
+| JS runtime errors | `window.onerror` in sidepanel | `JS_ERROR` |
+| Unhandled promises | `window.onunhandledrejection` in sidepanel | `PROMISE_ERROR` |
+| Chat API failures | HTTP error detection in streaming.js | `CHAT_API` |
+| Session load errors | Catch blocks in sessions.js | `SESSIONS` |
+| OAuth failures | Error paths in background.js | `OAUTH` |
+| CDP failures | Catch blocks in CDP handlers | `CDP` |
+| Chrome API calls | Logged via `xlog()` in background.js | `CHROME_API` |
+
+Sidepanel errors are sent to background.js via `chrome.runtime.sendMessage({ type: 'LOG_ERROR' })`, which forwards them to the server via `POST /api/logs/system`. All errors appear in the admin dashboard's System Logs section in real-time.
+
 ## Session Management
 
 - Each tab gets one active session, tracked by tab ID

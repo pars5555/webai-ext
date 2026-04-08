@@ -7,6 +7,7 @@
     model: 'claude-opus-4-6',
     theme: 'dark',
     devMode: false,
+    notifyOnFinish: false,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -109,6 +110,7 @@
   const elDevUserSelect = $('#dev-user-select');
   const elModelSelect = $('#model-select');
   const elThemeSelect = $('#theme-select');
+  const elNotifyOnFinish = $('#notify-on-finish');
   const elResetAllBtn = $('#reset-all-btn');
   const elToast = $('#toast');
 
@@ -166,7 +168,7 @@
     try {
       const [settingsResult, storageResult] = await Promise.all([
         sendMessage({ type: 'GET_SETTINGS' }).catch(() => null),
-        storageGet(['model', 'theme', 'devMode', 'devUser']),
+        storageGet(['model', 'theme', 'devMode', 'devUser', 'notifyOnFinish']),
       ]);
 
       if (settingsResult && settingsResult.model !== undefined) {
@@ -178,12 +180,14 @@
       }
       currentSettings.devMode = storageResult.devMode === true;
       currentSettings.devUser = storageResult.devUser || '';
+      currentSettings.notifyOnFinish = storageResult.notifyOnFinish === true;
     } catch (e) {
-      const storageResult = await storageGet(['model', 'theme', 'devMode', 'devUser']);
+      const storageResult = await storageGet(['model', 'theme', 'devMode', 'devUser', 'notifyOnFinish']);
       currentSettings.model = storageResult.model || DEFAULTS.model;
       currentSettings.theme = storageResult.theme || DEFAULTS.theme;
       currentSettings.devMode = storageResult.devMode === true;
       currentSettings.devUser = storageResult.devUser || '';
+      currentSettings.notifyOnFinish = storageResult.notifyOnFinish === true;
     }
   }
 
@@ -197,6 +201,7 @@
     if (elDevUserSelect) elDevUserSelect.value = currentSettings.devUser;
     elModelSelect.value = currentSettings.model;
     elThemeSelect.value = currentSettings.theme;
+    if (elNotifyOnFinish) elNotifyOnFinish.checked = currentSettings.notifyOnFinish;
     applyTheme(currentSettings.theme);
   }
 
@@ -222,6 +227,18 @@
         currentSettings.devUser = elDevUserSelect.value;
         storageSet({ devUser: currentSettings.devUser });
         showToast('Dev user changed — reload sidepanel to apply', 'success');
+      });
+    }
+
+    if (elNotifyOnFinish) {
+      elNotifyOnFinish.addEventListener('change', () => {
+        currentSettings.notifyOnFinish = elNotifyOnFinish.checked;
+        storageSet({ notifyOnFinish: currentSettings.notifyOnFinish });
+        if (currentSettings.notifyOnFinish) {
+          // Send a test notification to confirm it works
+          chrome.runtime.sendMessage({ type: 'NOTIFY', title: 'Notifications enabled', message: 'You will be notified when tasks finish' });
+        }
+        showToast(currentSettings.notifyOnFinish ? 'Notifications enabled' : 'Notifications disabled', 'success');
       });
     }
 
