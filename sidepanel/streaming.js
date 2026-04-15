@@ -559,9 +559,6 @@ function stopCurrentStream() {
     session.abortController = null;
   }
   var cleanupTab = session.taskTabId || session.tabId || currentTabId;
-  chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: cleanupTab }, function () {
-    if (chrome.runtime.lastError) { /* ignore */ }
-  });
 
   var killSid = activeSessionId;
   fetch(SERVER_URL + '/api/chat/kill', {

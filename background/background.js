@@ -63,8 +63,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   cdpState.delete(tabId);
-  tabNavTiming.delete(tabId);
-
   if (attachedTabs.has(tabId)) {
     attachedTabs.delete(tabId);
   }
@@ -135,22 +133,6 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
   }
 });
 
-// ─── webNavigation: track page load timing for AI context ────────────────────
-const tabNavTiming = new Map(); // tabId → {url, startTime, endTime}
-
-chrome.webNavigation.onCommitted.addListener((details) => {
-  if (details.frameId === 0) {
-    tabNavTiming.set(details.tabId, { url: details.url, startTime: details.timeStamp, endTime: null });
-  }
-});
-
-chrome.webNavigation.onCompleted.addListener((details) => {
-  if (details.frameId === 0) {
-    var entry = tabNavTiming.get(details.tabId);
-    if (entry) entry.endTime = details.timeStamp;
-  }
-});
-
 // ─── notifications: notify when long AI tasks complete ───────────────────────
 var _notifyTabMap = {};
 
@@ -179,11 +161,6 @@ chrome.notifications.onClicked.addListener(function (notifId) {
   }
 });
 
-// ─── sessions: recover recently closed tabs for AI ───────────────────────────
-function getRecentlyClosed(maxResults) {
-  return chrome.sessions.getRecentlyClosed({ maxResults: maxResults || 5 });
-}
-
 // ─── Message Router ───────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -191,10 +168,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   xlog('DEBUG', 'MSG_ROUTER', 'Received:', message.type, 'from tab:', tabId || 'extension');
 
   switch (message.type) {
-    case 'CANCEL_STREAM':
-      sendResponse({ status: 'cancelled' });
-      return true;
-
     case 'CDP_COMMAND':
       handleCdpCommand(message, tabId, sendResponse);
       return true;
@@ -228,11 +201,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleGetPageSources(tabId, sendResponse);
       return true;
 
-    case 'OPEN_OPTIONS_PAGE':
-      chrome.runtime.openOptionsPage();
-      sendResponse({ status: 'ok' });
-      return true;
-
     case 'GET_SETTINGS':
       chrome.storage.sync.get(['model', 'theme'], (result) => {
         sendResponse({
@@ -256,23 +224,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ logs: getRecentLogs(message.count || 50) });
       return true;
 
-    case 'GET_NAV_TIMING':
-      sendResponse({ timing: tabNavTiming.get(tabId) || null });
-      return true;
-
-    case 'GET_RECENTLY_CLOSED':
-      getRecentlyClosed(message.maxResults || 5).then(sessions => {
-        sendResponse({ sessions });
-      });
-      return true;
-
     case 'NOTIFY':
       notifyTaskComplete(message.title, message.message, message.tabId);
       sendResponse({ status: 'ok' });
-      return true;
-
-    case 'GET_CDP_STATE':
-      sendResponse({ state: cdpState.get(tabId) || { network: false, fetch: false }, attached: attachedTabs.has(tabId) });
       return true;
 
     case 'CDP_CLEANUP': {
@@ -304,9 +258,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    case 'CLEAR_SESSION':
-      sendResponse({ status: 'ok' });
-      return true;
 
     case 'FETCH_FILE': {
       // Background script can fetch any URL without CORS
