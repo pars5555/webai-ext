@@ -410,6 +410,9 @@ function clearChat() {
 
   switchToSession(null);
 
+  // Refresh model list on every new chat so admin changes show up immediately
+  if (typeof loadModelsFromServer === 'function') loadModelsFromServer();
+
   chrome.runtime.sendMessage({ type: 'CLEAR_SESSION', tabId: currentTabId }, function () {
     if (chrome.runtime.lastError) { /* ignore */ }
   });

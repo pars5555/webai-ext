@@ -327,12 +327,79 @@ chrome.storage.sync.get(['model'], function (result) {
   }
 });
 
+// Populate the model dropdown from the server.
+// Models are grouped by provider, sorted by the DB's sort_order (API preserves it).
+// Called on every showChatUI() (sidepanel open) and on clearChat() (new chat).
+var PROVIDER_LABELS = {
+  claude: 'Claude',
+  gemini: 'Gemini',
+  openai: 'OpenAI (via proxy)',
+  xai: 'xAI Grok (via proxy)',
+};
+
+async function loadModelsFromServer() {
+  try {
+    var resp = await fetch(SERVER_URL + '/api/models', { headers: getAuthHeaders() });
+    if (!resp.ok) return;
+    var data = await resp.json();
+    var models = data.models || [];
+    if (!models.length) return;
+
+    var previousValue = modelSelect.value;
+
+    // Group by provider
+    var groups = {};
+    for (var i = 0; i < models.length; i++) {
+      var m = models[i];
+      var p = m.provider || 'other';
+      if (!groups[p]) groups[p] = [];
+      groups[p].push(m);
+    }
+
+    // Stable order: known providers first, then any others alphabetically
+    var knownOrder = ['claude', 'gemini', 'openai', 'xai'];
+    var providerKeys = Object.keys(groups).sort(function (a, b) {
+      var ai = knownOrder.indexOf(a); var bi = knownOrder.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+
+    modelSelect.innerHTML = '';
+    for (var pi = 0; pi < providerKeys.length; pi++) {
+      var pk = providerKeys[pi];
+      var og = document.createElement('optgroup');
+      og.label = PROVIDER_LABELS[pk] || pk;
+      var list = groups[pk];
+      for (var j = 0; j < list.length; j++) {
+        var opt = document.createElement('option');
+        opt.value = list[j].id;
+        opt.textContent = list[j].name || list[j].id;
+        og.appendChild(opt);
+      }
+      modelSelect.appendChild(og);
+    }
+
+    // Restore previous selection if still present; else fall back to stored preference
+    if (previousValue && modelSelect.querySelector('option[value="' + previousValue + '"]')) {
+      modelSelect.value = previousValue;
+    } else {
+      chrome.storage.sync.get(['model'], function (r) {
+        if (r.model && modelSelect.querySelector('option[value="' + r.model + '"]')) {
+          modelSelect.value = r.model;
+        }
+      });
+    }
+  } catch (e) { /* ignore — keep whatever is currently rendered */ }
+}
+
 async function syncModelFromServer() {
   try {
     var resp = await fetch(SERVER_URL + '/api/user/settings', { headers: getAuthHeaders() });
     if (resp.ok) {
       var settings = await resp.json();
-      if (settings.model) {
+      if (settings.model && modelSelect.querySelector('option[value="' + settings.model + '"]')) {
         modelSelect.value = settings.model;
         chrome.storage.sync.set({ model: settings.model });
       }

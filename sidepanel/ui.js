@@ -338,7 +338,10 @@ function showAuthOverlay() {
 function showChatUI() {
   if (authOverlay) authOverlay.style.display = 'none';
   updateUserBadge();
-  syncModelFromServer();
+  // Fetch model list first, then sync the user's saved choice (needs populated options)
+  loadModelsFromServer().then(function () {
+    syncModelFromServer();
+  });
   pingServer();
   syncPromptsFromServer().then(function () {
     return loadUserSessions();
