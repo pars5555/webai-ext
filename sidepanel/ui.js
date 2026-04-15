@@ -343,6 +343,7 @@ function showChatUI() {
     syncModelFromServer();
   });
   pingServer();
+  if (typeof openUserEventStream === 'function') openUserEventStream();
   syncPromptsFromServer().then(function () {
     return loadUserSessions();
   }).then(function () {

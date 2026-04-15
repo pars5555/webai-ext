@@ -60,6 +60,63 @@ function isActiveStreaming() {
 }
 
 // ---------------------------------------------------------------------------
+// User-events SSE channel — server can push commands here (e.g. an admin
+// triggers a remote test that fills the chat input + selects a model + sends).
+// Connection is kept open as long as the side panel is open.
+// ---------------------------------------------------------------------------
+var _userEventStream = null;
+var _userEventReconnectTimer = null;
+
+function openUserEventStream() {
+  closeUserEventStream();
+  if (!authState.accessToken) return;
+  var url = SERVER_URL + '/api/user/events?token=' + encodeURIComponent(authState.accessToken);
+  try {
+    _userEventStream = new EventSource(url);
+  } catch (e) { return; }
+
+  _userEventStream.onmessage = function (e) {
+    var data;
+    try { data = JSON.parse(e.data); } catch (_) { return; }
+    handleUserEvent(data);
+  };
+  _userEventStream.onerror = function () {
+    // EventSource auto-reconnects on most errors; if the server returned 401
+    // we close ourselves and try after 5s in case the access token refreshed.
+    if (_userEventReconnectTimer) clearTimeout(_userEventReconnectTimer);
+    _userEventReconnectTimer = setTimeout(function () {
+      if (authState.accessToken) openUserEventStream();
+    }, 5000);
+  };
+}
+
+function closeUserEventStream() {
+  if (_userEventStream) { try { _userEventStream.close(); } catch (_) {} _userEventStream = null; }
+  if (_userEventReconnectTimer) { clearTimeout(_userEventReconnectTimer); _userEventReconnectTimer = null; }
+}
+
+function handleUserEvent(ev) {
+  if (!ev || !ev.type) return;
+  if (ev.type === 'remote_test') {
+    // Admin pushed a test — switch model dropdown and send the message
+    // through the regular UI path so user can watch it happen.
+    if (ev.model && modelSelect) {
+      var hasOpt = !!modelSelect.querySelector('option[value="' + ev.model + '"]');
+      if (hasOpt) {
+        modelSelect.value = ev.model;
+        chrome.storage.sync.set({ model: ev.model });
+      }
+    }
+    var msg = String(ev.message || '').trim();
+    if (msg) {
+      inputEl.value = msg;
+      // Tiny delay so the model switch UI updates first, then send.
+      setTimeout(function () { sendBtn.click(); }, 100);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Global error reporter — sends errors to background for admin logging
 // ---------------------------------------------------------------------------
 function reportError(category, msg) {
