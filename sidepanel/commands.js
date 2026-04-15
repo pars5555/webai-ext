@@ -156,7 +156,7 @@ async function handleCommand(text, tabId) {
           var userContent = '/network\n\n[Context: ' + contextStr + ']';
           conversationHistory.push({ role: 'user', content: userContent });
           sendViaServerSSE(userContent, tabId);
-          isStreaming = true;
+          if (activeSessionId && sessions.has(activeSessionId)) sessions.get(activeSessionId).isStreaming = true;
           updateSendButton();
         }
       });
@@ -180,7 +180,7 @@ async function handleCommand(text, tabId) {
         var userContent = '/cookies\n\n[Context: ' + contextStr + ']';
         conversationHistory.push({ role: 'user', content: userContent });
         sendViaServerSSE(userContent, tabId);
-        isStreaming = true;
+        if (activeSessionId && sessions.has(activeSessionId)) sessions.get(activeSessionId).isStreaming = true;
         updateSendButton();
       });
       return true;
@@ -220,7 +220,7 @@ async function handleCommand(text, tabId) {
         var userContent = '/cdp ' + arg + '\n\n[Context: ' + contextStr + ']';
         conversationHistory.push({ role: 'user', content: userContent });
         sendViaServerSSE(userContent, tabId);
-        isStreaming = true;
+        if (activeSessionId && sessions.has(activeSessionId)) sessions.get(activeSessionId).isStreaming = true;
         updateSendButton();
       });
       return true;
@@ -248,14 +248,15 @@ async function handleCommand(text, tabId) {
 // ---------------------------------------------------------------------------
 async function executeCdpFromResponse(responseText, tabId, targetSid) {
   if (!responseText || !tabId) return null;
-  if (autoExecCancelled) return null;
+  var session = targetSid && sessions.get(targetSid);
+  if (session && session.autoExecCancelled) return null;
 
   var results = [];
 
   var allBlocksRegex = /```(cdp|js|javascript|ext|bash|sh|shell|webfetch|websearch|captcha)\s*\n([\s\S]*?)```/g;
   var match;
   while ((match = allBlocksRegex.exec(responseText)) !== null) {
-    if (autoExecCancelled) return results;
+    if (session && session.autoExecCancelled) return results;
     var blockType = match[1] === 'javascript' ? 'js' : match[1];
     if (blockType === 'sh' || blockType === 'shell') blockType = 'bash';
     var rawCmd = match[2].trim();
@@ -269,7 +270,7 @@ async function executeCdpFromResponse(responseText, tabId, targetSid) {
         var resTabId = res.tabId || (res.result && res.result.tabId);
         if (resTabId) {
           tabId = resTabId;
-          taskTabId = resTabId;
+          if (session) session.taskTabId = resTabId;
         }
       } catch (e) {
         results.push({ type: 'ext_error', action: rawCmd.substring(0, 50), error: e.message });
@@ -348,7 +349,7 @@ async function executeCdpFromResponse(responseText, tabId, targetSid) {
         if (cdpCmd.action && !cdpCmd.method) {
           var extRes = await handleExtInAutoExec(cdpCmd);
           results.push({ type: 'ext', action: cdpCmd.action, result: JSON.stringify(extRes, null, 2).substring(0, 5000) });
-          if (extRes.tabId) { tabId = extRes.tabId; taskTabId = extRes.tabId; }
+          if (extRes.tabId) { tabId = extRes.tabId; if (session) session.taskTabId = extRes.tabId; }
           continue;
         }
         if (cdpCmd.method) {

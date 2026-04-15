@@ -2,30 +2,32 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// Streaming state
+// Per-task state lives on each session entry (sessions.get(sid)):
+//   .isStreaming      — true while a stream is in flight
+//   .autoFollowUpCount — CDP/JS auto-exec loop counter for THIS session
+//   .autoExecCancelled — stop flag for THIS session's auto-exec loop
+//   .taskTabId        — current CDP target tab (may change if AI creates tab)
+//   .stepSendTime     — last step's send timestamp (for AI timing)
+//   .messageQueue     — messages queued while this session is streaming
+//   .streamText       — accumulated delta text
+//   .abortController  — fetch abort handle for stopping
+//   .tabId            — original tab the session was created from
+//
+// Only MAX_AUTO_FOLLOW_UPS stays module-scoped since it's a constant.
 // ---------------------------------------------------------------------------
-var globalMessageQueue = [];
-var autoFollowUpCount = 0;
 var MAX_AUTO_FOLLOW_UPS = 100;
-var taskTabId = null;
-var autoExecCancelled = false;
 
 // ---------------------------------------------------------------------------
-// Message queue (per-session)
+// Queue processing — operates on the ACTIVE session only. If user is on a
+// different tab, the queued messages sit on that session until the user
+// switches back (handled in switchToSession).
 // ---------------------------------------------------------------------------
-function getMessageQueue() {
-  if (activeSessionId && sessions.has(activeSessionId)) {
-    var s = sessions.get(activeSessionId);
-    if (!s.messageQueue) s.messageQueue = [];
-    return s.messageQueue;
-  }
-  return globalMessageQueue;
-}
-
 function processQueue() {
-  var queue = getMessageQueue();
-  if (isStreaming || queue.length === 0) return;
-  var next = queue.shift();
+  if (!activeSessionId || !sessions.has(activeSessionId)) return;
+  var session = sessions.get(activeSessionId);
+  if (session.isStreaming) return;
+  if (!session.messageQueue || session.messageQueue.length === 0) return;
+  var next = session.messageQueue.shift();
   doSendMessage(next.text, next.attachments, true);
 }
 
@@ -39,11 +41,16 @@ async function sendMessage() {
   inputEl.value = '';
   inputEl.style.height = 'auto';
 
-  if (isStreaming) {
+  // Only queue if the ACTIVE session is streaming. If user is on a tab with
+  // no session (or a different session that isn't streaming), treat this as
+  // a brand-new request for the current tab.
+  if (isActiveStreaming()) {
     var queuedAttachments = [].concat(pendingAttachments);
     pendingAttachments = [];
     renderAttachments();
-    getMessageQueue().push({ text: text, attachments: queuedAttachments });
+    var activeSession = sessions.get(activeSessionId);
+    if (!activeSession.messageQueue) activeSession.messageQueue = [];
+    activeSession.messageQueue.push({ text: text, attachments: queuedAttachments });
     var welcome = messagesEl.querySelector('.wai-welcome');
     if (welcome) welcome.remove();
     var qMsgEl = addMessageToUI('user', text);
@@ -61,7 +68,6 @@ async function sendMessage() {
 }
 
 async function doSendMessage(text, attachments, alreadyShown) {
-  autoFollowUpCount = 0;
   var tabId = currentTabId;
   if (!tabId) {
     tabId = await getActiveTabId();
@@ -97,6 +103,11 @@ async function doSendMessage(text, attachments, alreadyShown) {
       isStreaming: true,
       streamText: '',
       tabId: tabId,
+      taskTabId: tabId,
+      autoFollowUpCount: 0,
+      autoExecCancelled: false,
+      stepSendTime: 0,
+      messageQueue: [],
       model: modelSelect.value,
       promptType: promptSelect ? promptSelect.value : 'general',
       title: text.substring(0, 50),
@@ -106,6 +117,14 @@ async function doSendMessage(text, attachments, alreadyShown) {
     });
     addSessionToSelector(tempId, text.substring(0, 30) + (text.length > 30 ? '...' : ''));
     switchToSession(tempId);
+  } else {
+    // Reset per-task counters at the start of a new user turn in an existing session.
+    var curSession = sessions.get(activeSessionId);
+    if (curSession) {
+      curSession.autoFollowUpCount = 0;
+      curSession.autoExecCancelled = false;
+      curSession.taskTabId = tabId;
+    }
   }
 
   var welcome = messagesEl.querySelector('.wai-welcome');
@@ -152,8 +171,6 @@ async function doSendMessage(text, attachments, alreadyShown) {
     conversationHistory.push({ role: 'user', content: historyContent });
   }
 
-  taskTabId = tabId;
-
   var isFirstMessage = isNewSession;
   var pageContext = null;
   if (isFirstMessage) {
@@ -164,7 +181,8 @@ async function doSendMessage(text, attachments, alreadyShown) {
     } catch (e) { /* non-critical */ }
   }
 
-  _stepSendTime = Date.now();
+  var nowSession = activeSessionId && sessions.get(activeSessionId);
+  if (nowSession) nowSession.stepSendTime = Date.now();
   var userImages = imageAttachments.length > 0 ? imageAttachments.map(function (img) {
     return { media_type: img.mediaType, data: img.base64 };
   }) : null;
@@ -192,7 +210,6 @@ async function doSendMessage(text, attachments, alreadyShown) {
 
   sendViaServerSSE(historyContent, tabId, 0, pageContext, false, null, userImages);
 
-  isStreaming = true;
   if (activeSessionId && sessions.has(activeSessionId)) {
     sessions.get(activeSessionId).isStreaming = true;
   }
@@ -377,15 +394,16 @@ async function sendViaServerSSE(userMessage, tabId, retryCount, pageContext, isE
 // ---------------------------------------------------------------------------
 function onStreamStart(targetSid) {
   if (targetSid && sessions.has(targetSid)) {
-    sessions.get(targetSid).streamText = '';
+    var s = sessions.get(targetSid);
+    s.streamText = '';
+    s.autoExecCancelled = false;
+    s.isStreaming = true;
   }
-  autoExecCancelled = false;
   var container = getSessionContainer(targetSid);
   var msgEl = createMessageElement('assistant', '');
   msgEl.classList.add('streaming-msg');
   container.appendChild(msgEl);
   if (targetSid === activeSessionId) {
-    isStreaming = true;
     updateSendButton();
     scrollToBottom();
   }
@@ -434,21 +452,22 @@ function onStreamEnd(fullText, cancelled, targetSid) {
     scrollToBottom();
   }
 
-  var execTabId = taskTabId || currentTabId;
-  var aiResponseMs = _stepSendTime ? (Date.now() - _stepSendTime) : 0;
+  var endedSession = targetSid && sessions.get(targetSid);
+  var execTabId = (endedSession && endedSession.taskTabId) || (endedSession && endedSession.tabId) || currentTabId;
+  var aiResponseMs = (endedSession && endedSession.stepSendTime) ? (Date.now() - endedSession.stepSendTime) : 0;
 
-  if (fullText && !cancelled && execTabId) {
+  if (fullText && !cancelled && execTabId && endedSession) {
     var execStart = Date.now();
     executeCdpFromResponse(fullText, execTabId, targetSid).then(function (cdpResults) {
       var execMs = Date.now() - execStart;
-      if (autoExecCancelled) {
+      if (endedSession.autoExecCancelled) {
         addSystemMessageToContainer(container, 'Stopped by user.');
         finishTask(targetSid);
         return;
       }
       if (cdpResults && cdpResults.length > 0) {
-        autoFollowUpCount++;
-        if (autoFollowUpCount > MAX_AUTO_FOLLOW_UPS) {
+        endedSession.autoFollowUpCount = (endedSession.autoFollowUpCount || 0) + 1;
+        if (endedSession.autoFollowUpCount > MAX_AUTO_FOLLOW_UPS) {
           addSystemMessageToContainer(container, 'Auto-execution limit reached (' + MAX_AUTO_FOLLOW_UPS + ' steps). Type a message to continue.');
           finishTask(targetSid);
           return;
@@ -458,7 +477,7 @@ function onStreamEnd(fullText, cancelled, targetSid) {
         var profile = 'AI: ' + (aiResponseMs / 1000).toFixed(1) + 's | Exec: ' + (execMs / 1000).toFixed(1) + 's | Total: ' + (stepTotalMs / 1000).toFixed(1) + 's';
 
         var chatResults = formatCdpResultsForChat(cdpResults);
-        addSystemMessageToContainer(container, 'Step ' + autoFollowUpCount + ' executed \u2014 ' + cdpResults.length + ' command(s) \u2014 ' + profile + chatResults);
+        addSystemMessageToContainer(container, 'Step ' + endedSession.autoFollowUpCount + ' executed \u2014 ' + cdpResults.length + ' command(s) \u2014 ' + profile + chatResults);
 
         var curHist = getSessionHistory(targetSid);
         if (curHist.length > 0) {
@@ -468,7 +487,10 @@ function onStreamEnd(fullText, cancelled, targetSid) {
           }
         }
 
-        chrome.tabs.get(execTabId, function (tab) {
+        // execTabId may have been updated by commands.js (e.g. ext createTab).
+        var nextTab = endedSession.taskTabId || execTabId;
+
+        chrome.tabs.get(nextTab, function (tab) {
           if (chrome.runtime.lastError || !tab) {
             addSystemMessageToContainer(container, 'Tab closed \u2014 stopping.');
             finishTask(targetSid);
@@ -478,20 +500,15 @@ function onStreamEnd(fullText, cancelled, targetSid) {
           var formatted = formatCdpResultsAsPrompt(cdpResults);
           var followUpText = formatted.text;
           var followUpImages = formatted.images || [];
-          flushNetEvents(execTabId).then(function (netSummary) {
+          flushNetEvents(nextTab).then(function (netSummary) {
             if (netSummary) followUpText += '\n\n' + netSummary;
             var curHist2 = getSessionHistory(targetSid);
             curHist2.push({ role: 'user', content: followUpText });
 
-            if (targetSid && sessions.has(targetSid)) {
-              sessions.get(targetSid).isStreaming = true;
-            }
-            if (targetSid === activeSessionId) {
-              isStreaming = true;
-              updateSendButton();
-            }
-            _stepSendTime = Date.now();
-            sendViaServerSSE(followUpText, execTabId, 0, null, true, targetSid, followUpImages);
+            endedSession.isStreaming = true;
+            endedSession.stepSendTime = Date.now();
+            if (targetSid === activeSessionId) updateSendButton();
+            sendViaServerSSE(followUpText, nextTab, 0, null, true, targetSid, followUpImages);
           });
         });
       } else {
@@ -512,10 +529,7 @@ function onStreamError(error, targetSid) {
     s.isStreaming = false;
     s.abortController = null;
   }
-  if (targetSid === activeSessionId) {
-    isStreaming = false;
-    updateSendButton();
-  }
+  if (targetSid === activeSessionId) updateSendButton();
 
   var container = getSessionContainer(targetSid);
   var streamingMsg = container.querySelector('.streaming-msg');
@@ -539,33 +553,29 @@ function stopCurrentStream() {
   var session = sessions.get(activeSessionId);
   if (!session.isStreaming) return;
 
-  autoExecCancelled = true;
+  session.autoExecCancelled = true;
   if (session.abortController) {
     session.abortController.abort();
     session.abortController = null;
   }
-  chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: taskTabId || currentTabId }, function () {
+  var cleanupTab = session.taskTabId || session.tabId || currentTabId;
+  chrome.runtime.sendMessage({ type: 'CANCEL_STREAM', tabId: cleanupTab }, function () {
     if (chrome.runtime.lastError) { /* ignore */ }
   });
 
-  var killSid = activeSessionId || chatSessionId;
-  if (killSid) {
-    fetch(SERVER_URL + '/api/chat/kill', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      body: JSON.stringify({ sessionId: killSid }),
-    }).catch(function () {});
-  }
+  var killSid = activeSessionId;
+  fetch(SERVER_URL + '/api/chat/kill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ sessionId: killSid }),
+  }).catch(function () {});
 
-  var cleanupTab = taskTabId || currentTabId;
   if (cleanupTab) {
     chrome.runtime.sendMessage({ type: 'CDP_CLEANUP', tabId: cleanupTab });
   }
 
-  autoFollowUpCount = 0;
-  taskTabId = null;
+  session.autoFollowUpCount = 0;
   session.isStreaming = false;
-  isStreaming = false;
 
   var container = session.el || messagesEl;
   var streamingMsgEl = container.querySelector('.streaming-msg');
@@ -583,9 +593,8 @@ function stopCurrentStream() {
 }
 
 function finishTask(targetSid) {
-  autoFollowUpCount = 0;
-
-  var cleanupTabId = taskTabId || currentTabId;
+  var session = targetSid && sessions.get(targetSid);
+  var cleanupTabId = (session && (session.taskTabId || session.tabId)) || currentTabId;
   if (cleanupTabId) {
     chrome.runtime.sendMessage({ type: 'CDP_CLEANUP', tabId: cleanupTabId });
   }
@@ -595,31 +604,25 @@ function finishTask(targetSid) {
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
   }).catch(function () {});
 
-  taskTabId = null;
-
-  if (targetSid && sessions.has(targetSid)) {
-    var s = sessions.get(targetSid);
-    s.isStreaming = false;
-    s.streamText = '';
-    s.abortController = null;
+  if (session) {
+    session.isStreaming = false;
+    session.streamText = '';
+    session.abortController = null;
+    session.autoFollowUpCount = 0;
   }
 
   if (targetSid === activeSessionId) {
-    isStreaming = false;
     updateSendButton();
     updateContextMeter();
   }
 
-  if (targetSid && sessions.has(targetSid)) {
-    var sess = sessions.get(targetSid);
-    if (sess.messageQueue && sess.messageQueue.length > 0) {
-      var next = sess.messageQueue.shift();
-      if (targetSid !== activeSessionId) {
-        switchToSession(targetSid);
-      }
-      doSendMessage(next.text, next.attachments, true);
-      return;
+  if (session && session.messageQueue && session.messageQueue.length > 0) {
+    var next = session.messageQueue.shift();
+    if (targetSid !== activeSessionId) {
+      switchToSession(targetSid);
     }
+    doSendMessage(next.text, next.attachments, true);
+    return;
   }
 
   // Notify if user is on a different tab

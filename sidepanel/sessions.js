@@ -99,7 +99,6 @@ function saveActiveSessionState() {
   if (activeSessionId && sessions.has(activeSessionId)) {
     var s = sessions.get(activeSessionId);
     s.history = conversationHistory;
-    s.isStreaming = isStreaming;
     s.streamText = currentStreamText;
     s.inputValue = inputEl.value;
     s.inputAttachments = [].concat(pendingAttachments);
@@ -122,7 +121,6 @@ function switchToSession(sessionId) {
     activeSessionId = null;
     conversationHistory = [];
     chatSessionId = null;
-    isStreaming = false;
     currentStreamText = '';
     pendingAttachments = [];
     renderAttachments();
@@ -150,7 +148,6 @@ function switchToSession(sessionId) {
     activeSessionId = sessionId;
     conversationHistory = session.history;
     chatSessionId = sessionId;
-    isStreaming = session.isStreaming || false;
     currentStreamText = session.streamText || '';
     inputEl.value = session.inputValue || '';
     inputEl.style.height = 'auto';
@@ -302,6 +299,11 @@ async function loadUserSessions() {
         isStreaming: false,
         streamText: '',
         tabId: s.tab_id,
+        taskTabId: s.tab_id,
+        autoFollowUpCount: 0,
+        autoExecCancelled: false,
+        stepSendTime: 0,
+        messageQueue: [],
         model: s.model || '',
         promptType: s.prompt_type || 'general',
         title: s.title || s.first_message || s.id.slice(0, 8),
@@ -403,7 +405,6 @@ function clearChat() {
   conversationHistory = [];
   chatSessionId = null;
   activeSessionId = null;
-  isStreaming = false;
   currentStreamText = '';
   pendingAttachments = [];
   renderAttachments();

@@ -439,7 +439,7 @@ function hideAuthSuccess() {
 // Button state management
 // ---------------------------------------------------------------------------
 function updateSendButton() {
-  if (isStreaming) {
+  if (isActiveStreaming()) {
     sendBtn.innerHTML = STOP_ICON;
     sendBtn.title = 'Stop response';
     sendBtn.classList.add('stop-mode');
@@ -462,7 +462,7 @@ function updateScriptsButton() {
   var hasActiveSession = activeSessionId && sessions.has(activeSessionId);
   var sessionIsSecuirty = hasActiveSession && sessions.get(activeSessionId).promptType === 'security';
   scriptsBtn.style.display = isSecurityPrompt ? '' : 'none';
-  scriptsBtn.disabled = !(hasActiveSession && sessionIsSecuirty && !isStreaming);
+  scriptsBtn.disabled = !(hasActiveSession && sessionIsSecuirty && !isActiveStreaming());
   scriptsBtn.style.opacity = scriptsBtn.disabled ? '0.4' : '1';
 }
 
