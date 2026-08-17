@@ -294,6 +294,15 @@ async function initAuth() {
               resolve(true);
               return;
             }
+            // Refresh failed, so the stored session is genuinely dead. Drop it
+            // and ask for a sign-in. Without this we fell through with
+            // isAuthenticated still optimistically true, rendering neither the
+            // chat UI nor the sign-in overlay -- a blank panel that reported
+            // success to the caller.
+            await clearAuthState();
+            showAuthOverlay();
+            resolve(false);
+            return;
           }
         } catch (e) {
           console.warn('Auth check failed (server may be down):', e.message);
@@ -307,6 +316,9 @@ async function initAuth() {
         showAuthOverlay();
         resolve(false);
       } else {
+        // Reachable when /api/auth/me answered non-401 (e.g. a 5xx). We still
+        // hold a token, so show the chat UI rather than nothing at all.
+        showChatUI();
         resolve(true);
       }
     });

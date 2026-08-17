@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Web Assistant",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "AI-powered browser assistant. Chat with Claude AI to get help with any webpage.",
   "permissions": [
     "activeTab",
