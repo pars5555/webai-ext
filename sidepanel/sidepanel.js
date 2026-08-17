@@ -416,7 +416,8 @@ chrome.storage.sync.get(['model'], function (result) {
 
 // Populate the model dropdown from the server.
 // Models are grouped by provider, sorted by the DB's sort_order (API preserves it).
-// Called on every showChatUI() (sidepanel open) and on clearChat() (new chat).
+// Called on showChatUI(), on clearChat() (new chat), and whenever the panel
+// becomes visible again (see the visibilitychange handler below).
 var PROVIDER_LABELS = {
   claude: 'Claude',
   openai: 'OpenAI (via proxy)',
@@ -440,6 +441,7 @@ function formatModelLabel(m) {
 }
 
 async function loadModelsFromServer() {
+  _lastModelLoad = Date.now();
   try {
     var resp = await fetch(SERVER_URL + '/api/models', { headers: getAuthHeaders() });
     if (!resp.ok) return;
@@ -495,6 +497,28 @@ async function loadModelsFromServer() {
     }
   } catch (e) { /* ignore — keep whatever is currently rendered */ }
 }
+
+// Refresh the model list whenever the panel becomes visible again.
+//
+// showChatUI() only runs off the initial auth check, which happens once per
+// sidepanel document. Chrome keeps that document alive across close/reopen,
+// so without this the panel keeps showing whatever list it fetched the first
+// time it loaded — models added on the server never appear until the user
+// reinstalls the extension. Small throttle so window switching doesn't refetch
+// on every flip; any real close/reopen is far slower than this.
+var MODEL_REFRESH_MIN_MS = 5000;
+var _lastModelLoad = 0;
+
+function refreshModelsIfStale() {
+  var now = Date.now();
+  if (now - _lastModelLoad < MODEL_REFRESH_MIN_MS) return;
+  _lastModelLoad = now;
+  loadModelsFromServer();
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible') refreshModelsIfStale();
+});
 
 async function syncModelFromServer() {
   try {

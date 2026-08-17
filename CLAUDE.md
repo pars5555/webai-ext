@@ -50,6 +50,30 @@ ssh pars@35.238.47.14 'bash /var/www/webai-server/deploy.sh'
 - Consent screen URLs: home `https://webai.pc.am`, privacy `/privacy`, terms `/terms`.
 - Brand re-verification requested 2026-07-16 after fixing: (1) homepage ownership, (2) app name mismatch.
 
+## Browser automation — always use the dedicated Edge instance on CDP port 9150
+
+Any browser-driven task (Chrome Web Store / Play Console, admin panel, landing page, anything
+requiring a logged-in session) **must** run in a separate Edge instance listening on remote
+debugging port **9150**. Other sessions drive their own browsers, and sharing one profile mixes
+up console state and logins.
+
+Procedure, every time:
+
+1. Check the port is alive: `GET http://127.0.0.1:9150/json/version`.
+2. If it is not, launch a new instance and wait for the port:
+   ```powershell
+   Start-Process "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" -ArgumentList `
+     "--remote-debugging-port=9150","--user-data-dir=C:\Users\pars\AppData\Local\EdgeCDP9150",`
+     "--no-first-run","--no-default-browser-check"
+   ```
+   The dedicated `--user-data-dir` is what keeps this profile (and its logins) isolated.
+3. Connect over CDP and work **only** in that instance — never the user's normal browser.
+
+Interaction rules: drive the page with the CDP **DOM** and **Input** domains (read structure and
+state via DOM, click/type via Input). Fall back to **Page.captureScreenshot** when the DOM alone
+is not enough to tell what is on screen. The user logs in manually in this instance — do not try
+to automate credential entry.
+
 ## Gotchas
 
 - `landing/landing/` is a stale duplicate of the old landing page (old "AI Web Assistant" branding) — not served at root, safe to delete.
