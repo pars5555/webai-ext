@@ -386,9 +386,7 @@ function updateUserBadge() {
 
 function fetchBalance() {
   if (!authState.accessToken) return;
-  fetch(SERVER_URL + '/api/billing/balance', {
-    headers: { 'Authorization': 'Bearer ' + authState.accessToken }
-  }).then(function (res) {
+  authedFetch(SERVER_URL + '/api/billing/balance', {}).then(function (res) {
     if (res.ok) return res.json();
     return null;
   }).then(function (data) {
@@ -404,16 +402,21 @@ function handleTopUp() {
     if (!amount) return;
     amount = parseFloat(amount);
     if (isNaN(amount) || amount < 25 || amount > 1000) { showAlert('Amount must be between $25 and $1000'); return; }
-    fetch(SERVER_URL + '/api/billing/create-payment', {
+    authedFetch(SERVER_URL + '/api/billing/create-payment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authState.accessToken },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountUsd: amount }),
-    }).then(function (res) { return res.json(); }).then(function (data) {
-      if (data.invoiceUrl) {
-        window.open(data.invoiceUrl, '_blank');
-      } else {
-        showAlert(data.error || 'Failed to create payment');
+    }).then(function (res) {
+      // Read the body even on failure -- the API puts the reason in .error.
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        return { ok: res.ok, data: data };
+      });
+    }).then(function (r) {
+      if (r.ok && r.data.invoiceUrl) {
+        window.open(r.data.invoiceUrl, '_blank');
+        return;
       }
+      showAlert(friendlyError(r.data.error, 'Failed to create payment'));
     }).catch(function (e) {
       showAlert('Payment error: ' + e.message);
     });

@@ -350,7 +350,28 @@ function clearAuthState() {
 // ---------------------------------------------------------------------------
 // Auth: OAuth / Refresh / Logout
 // ---------------------------------------------------------------------------
-async function refreshAccessToken() {
+// Single-flight guard. Refresh tokens are single-use: /api/auth/refresh revokes
+// the presented token and issues a new pair. Opening the panel fires several
+// authenticated requests at once (models, prompts, sessions, balance, ping), so
+// on a stale access token they all 401 together. Without this, each one starts
+// its own refresh; the first rotates the token and the rest present a
+// now-revoked one, get "Invalid or expired refresh token", and drop the session
+// -- logging the user out. Concurrent callers must await the same refresh.
+var _refreshInFlight = null;
+
+function refreshAccessToken() {
+  if (_refreshInFlight) return _refreshInFlight;
+  _refreshInFlight = _doRefreshAccessToken().then(function (ok) {
+    _refreshInFlight = null;
+    return ok;
+  }, function (e) {
+    _refreshInFlight = null;
+    throw e;
+  });
+  return _refreshInFlight;
+}
+
+async function _doRefreshAccessToken() {
   if (!authState.refreshToken) return false;
   try {
     var res = await fetch(SERVER_URL + '/api/auth/refresh', {
@@ -368,6 +389,44 @@ async function refreshAccessToken() {
   } catch (e) {
     return false;
   }
+}
+
+// Authenticated fetch with one automatic refresh-and-retry on 401.
+//
+// Access tokens live 15 minutes. Any panel left open longer than that gets a
+// 401 on its next call. Only the chat path handled this, so every other action
+// (top up, balance, sessions) surfaced the raw server code -- clicking Top Up
+// on a stale panel showed the literal string "token_expired".
+//
+// Pass options WITHOUT an Authorization header; this adds it, and re-adds the
+// refreshed one before retrying.
+async function authedFetch(url, options) {
+  options = options || {};
+  var baseHeaders = options.headers || {};
+  var opts = Object.assign({}, options);
+
+  opts.headers = Object.assign({}, baseHeaders, getAuthHeaders());
+  var res = await fetch(url, opts);
+  if (res.status !== 401) return res;
+
+  var refreshed = await refreshAccessToken();
+  if (!refreshed) return res;
+
+  opts.headers = Object.assign({}, baseHeaders, getAuthHeaders());
+  return fetch(url, opts);
+}
+
+// Turn a server error payload into something worth showing a user. The API
+// returns prose for business errors but machine codes for auth failures.
+function friendlyError(err, fallback) {
+  var map = {
+    token_expired: 'Your session expired. Please sign out and sign in again.',
+    invalid_token: 'Your session is no longer valid. Please sign in again.',
+    account_inactive: 'This account is suspended. Contact support.',
+    insufficient_balance: 'Your balance is empty. Please top up to continue.',
+  };
+  if (!err) return fallback;
+  return map[err] || err;
 }
 
 async function logout() {
