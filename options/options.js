@@ -4,7 +4,7 @@
   'use strict';
 
   const DEFAULTS = {
-    model: 'claude-opus-4-6',
+    model: 'claude-opus-5',
     theme: 'dark',
     devMode: false,
     notifyOnFinish: false,
@@ -200,6 +200,11 @@
     if (elDevUserGroup) elDevUserGroup.style.display = currentSettings.devMode ? '' : 'none';
     if (elDevUserSelect) elDevUserSelect.value = currentSettings.devUser;
     elModelSelect.value = currentSettings.model;
+    // Stale/removed model id (e.g. a legacy gemini-*) — fall back to the default
+    if (!elModelSelect.value) {
+      currentSettings.model = DEFAULTS.model;
+      elModelSelect.value = DEFAULTS.model;
+    }
     elThemeSelect.value = currentSettings.theme;
     if (elNotifyOnFinish) elNotifyOnFinish.checked = currentSettings.notifyOnFinish;
     applyTheme(currentSettings.theme);

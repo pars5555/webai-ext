@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AI Web Assistant",
   "version": "1.5.0",
-  "description": "AI-powered browser assistant. Chat with Claude and Gemini AI to get help with any webpage.",
+  "description": "AI-powered browser assistant. Chat with Claude AI to get help with any webpage.",
   "permissions": [
     "activeTab",
     "storage",

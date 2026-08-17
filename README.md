@@ -1,6 +1,6 @@
 # AI Web Assistant (wAi) — Chrome Extension
 
-AI-powered browser assistant. Chat with Claude and Gemini to interact with any webpage via a side panel.
+AI-powered browser assistant. Chat with Claude (plus OpenAI, xAI, and Mistral models via the server's LLM proxy) to interact with any webpage via a side panel.
 
 ## Architecture
 
@@ -28,7 +28,7 @@ webai-server/                  Express.js backend (separate repo)
 1. User opens the side panel and authenticates (Google/Apple/GitHub OAuth)
 2. Each browser tab gets its own chat session with a persistent DOM container
 3. User sends a message — the extension collects page context (URL, headings, visible elements, cookies) and sends it to the server via SSE
-4. Server routes to Claude or Gemini based on selected model, streams the response back
+4. Server routes to Claude natively, or to OpenAI/xAI/Mistral via the LLM proxy, based on selected model, streams the response back
 5. AI responses containing fenced code blocks (`js`, `cdp`, `ext`, `bash`, `webfetch`, `websearch`, `captcha`) are auto-executed:
    - **js** — evaluated on the page via `Runtime.evaluate` (CDP)
    - **cdp** — raw Chrome DevTools Protocol commands

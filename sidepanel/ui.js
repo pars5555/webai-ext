@@ -285,7 +285,7 @@ function estimateTokens(text) {
 }
 
 function getContextLimit() {
-  var model = modelSelect ? modelSelect.value : 'claude-opus-4-6';
+  var model = modelSelect ? modelSelect.value : 'claude-opus-5';
   return MODEL_CONTEXT_LIMITS[model] || 200000;
 }
 

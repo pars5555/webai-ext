@@ -1,7 +1,7 @@
 // background.js — Service worker for AI Web Assistant
 // Handles: CDP, cookies, network log, per-page toggle, OAuth, navigation tracking
 
-const MODEL = 'claude-opus-4-6';
+const MODEL = 'claude-opus-5';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 

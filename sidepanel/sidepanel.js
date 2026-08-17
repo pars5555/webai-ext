@@ -419,7 +419,6 @@ chrome.storage.sync.get(['model'], function (result) {
 // Called on every showChatUI() (sidepanel open) and on clearChat() (new chat).
 var PROVIDER_LABELS = {
   claude: 'Claude',
-  gemini: 'Gemini',
   openai: 'OpenAI (via proxy)',
   xai: 'xAI Grok (via proxy)',
 };
@@ -460,7 +459,7 @@ async function loadModelsFromServer() {
     }
 
     // Stable order: known providers first, then any others alphabetically
-    var knownOrder = ['claude', 'gemini', 'openai', 'xai'];
+    var knownOrder = ['claude', 'openai', 'xai'];
     var providerKeys = Object.keys(groups).sort(function (a, b) {
       var ai = knownOrder.indexOf(a); var bi = knownOrder.indexOf(b);
       if (ai === -1 && bi === -1) return a.localeCompare(b);
