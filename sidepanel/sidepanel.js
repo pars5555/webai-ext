@@ -885,10 +885,8 @@ function handleFiles(fileList) {
 // Auth overlay event listeners
 // ---------------------------------------------------------------------------
 var googleBtn = document.getElementById('wai-oauth-google');
-var appleBtn = document.getElementById('wai-oauth-apple');
 var githubBtn = document.getElementById('wai-oauth-github');
 if (googleBtn) googleBtn.addEventListener('click', function () { handleOAuth('google'); });
-if (appleBtn) appleBtn.addEventListener('click', function () { handleOAuth('apple'); });
 if (githubBtn) githubBtn.addEventListener('click', function () { handleOAuth('github'); });
 
 // User menu toggle
