@@ -56,7 +56,8 @@ ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16 'bash /var/www/webai-serv
   (category Sign-up, count One, label `lIymCIGlmuwcEJKd5aID`) — fired by `trackInstallClick()`
   on the "Add to Chrome" links in webai-server `landing/index.html`. Tag verified firing 2026-09-01.
 - Enhanced conversions deliberately left OFF (site collects no user data).
-- Billing/payments profile was not yet set up as of 2026-09-01 — needed before any campaign can run.
+- Billing/payments profile submitted 2026-09-02, **pending Google approval** — check Billing in a few
+  days; no campaign can run until it's approved. Next step after approval: build the first Search campaign.
 - Search Console property `https://webai.pc.am/` is verified under the same Google account.
 
 ## Browser automation — always use the dedicated Edge instance on CDP port 9173
