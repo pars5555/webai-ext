@@ -50,20 +50,20 @@ ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16 'bash /var/www/webai-serv
 - Consent screen URLs: home `https://webai.pc.am`, privacy `/privacy`, terms `/terms`.
 - Brand re-verification requested 2026-07-16 after fixing: (1) homepage ownership, (2) app name mismatch.
 
-## Browser automation — always use the dedicated Edge instance on CDP port 9150
+## Browser automation — always use the dedicated Edge instance on CDP port 9173
 
 Any browser-driven task (Chrome Web Store / Play Console, admin panel, landing page, anything
 requiring a logged-in session) **must** run in a separate Edge instance listening on remote
-debugging port **9150**. Other sessions drive their own browsers, and sharing one profile mixes
+debugging port **9173**. Other sessions drive their own browsers, and sharing one profile mixes
 up console state and logins.
 
 Procedure, every time:
 
-1. Check the port is alive: `GET http://127.0.0.1:9150/json/version`.
+1. Check the port is alive: `GET http://127.0.0.1:9173/json/version`.
 2. If it is not, launch a new instance and wait for the port:
    ```powershell
    Start-Process "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" -ArgumentList `
-     "--remote-debugging-port=9150","--user-data-dir=C:\Users\pars\AppData\Local\EdgeCDP9150",`
+     "--remote-debugging-port=9173","--user-data-dir=C:\Users\pars\AppData\Local\EdgeCDP9173",`
      "--no-first-run","--no-default-browser-check"
    ```
    The dedicated `--user-data-dir` is what keeps this profile (and its logins) isolated.
