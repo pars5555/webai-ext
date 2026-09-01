@@ -50,6 +50,15 @@ ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16 'bash /var/www/webai-serv
 - Consent screen URLs: home `https://webai.pc.am`, privacy `/privacy`, terms `/terms`.
 - Brand re-verification requested 2026-07-16 after fixing: (1) homepage ownership, (2) app name mismatch.
 
+## Google Ads (account `693-122-8762`, owner vahagnsookiasyan@gmail.com — same as the CWS publisher)
+
+- Google tag / conversion ID `AW-878268050`. Conversion action **"Extension install click"**
+  (category Sign-up, count One, label `lIymCIGlmuwcEJKd5aID`) — fired by `trackInstallClick()`
+  on the "Add to Chrome" links in webai-server `landing/index.html`. Tag verified firing 2026-09-01.
+- Enhanced conversions deliberately left OFF (site collects no user data).
+- Billing/payments profile was not yet set up as of 2026-09-01 — needed before any campaign can run.
+- Search Console property `https://webai.pc.am/` is verified under the same Google account.
+
 ## Browser automation — always use the dedicated Edge instance on CDP port 9173
 
 Any browser-driven task (Chrome Web Store / Play Console, admin panel, landing page, anything
