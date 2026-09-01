@@ -15,7 +15,7 @@ Published on Chrome Web Store as **"AI Web Assistant"** (id `ojhlpkiegeembmefmfh
 
 ## Production server
 
-- GCE VM `35.238.47.14`, SSH as `pars` (default local key authenticates, BatchMode works).
+- GCE VM `35.239.156.16` (hostname `rba`, Debian 11), SSH as `pars` **with the GCE key** (`ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16`) — the default key does NOT work. `pars` has passwordless sudo; docker needs `sudo`. Full infra reference: webai-server `server.md`.
 - Repo checkout at `/var/www/webai-server`, runs as Docker container `webai`, port `3466`, public at **https://webai.pc.am**.
 - Server pulls GitHub via deploy key `~/.ssh/webai_deploy` (ssh config host alias `github-webai-server`).
   - If `git pull` fails with `Permission denied (publickey)`: the deploy key is missing from GitHub → re-add `~/.ssh/webai_deploy.pub` as a **read-only deploy key** on `pars5555/webai-server` (happened 2026-07-16; re-added via API as `claude-server-deploy`).
@@ -26,7 +26,7 @@ Published on Chrome Web Store as **"AI Web Assistant"** (id `ojhlpkiegeembmefmfh
 # 1. commit + push to master
 git push origin master
 # 2. run deploy on the server
-ssh pars@35.238.47.14 'bash /var/www/webai-server/deploy.sh'
+ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16 'bash /var/www/webai-server/deploy.sh'
 ```
 
 - Quick deploy = git pull + `npm ci` in container + `docker compose restart` + health check.
