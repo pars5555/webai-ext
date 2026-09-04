@@ -56,9 +56,38 @@ ssh -i ~/.ssh/google_compute_engine pars@35.239.156.16 'bash /var/www/webai-serv
   (category Sign-up, count One, label `lIymCIGlmuwcEJKd5aID`) — fired by `trackInstallClick()`
   on the "Add to Chrome" links in webai-server `landing/index.html`. Tag verified firing 2026-09-01.
 - Enhanced conversions deliberately left OFF (site collects no user data).
-- Billing/payments profile submitted 2026-09-02, **pending Google approval** — check Billing in a few
-  days; no campaign can run until it's approved. Next step after approval: build the first Search campaign.
+- Billing approved 2026-09-04: Postpay, payer Lilit Baghdasaryan, primary card Mastercard ••••3457,
+  Google Payments account `1688-9416-0039-6940`. No backup payment method set.
 - Search Console property `https://webai.pc.am/` is verified under the same Google account.
+
+### Live campaign — "WebAI - Search - Extension installs" (id `24215280140`, launched 2026-09-04)
+
+| Setting | Value |
+|---|---|
+| Type / goal | Search, conversion goal Sign-ups |
+| Networks | Google Search only — Search Partners and Display **off** |
+| Locations | US, UK, Canada, Australia; targeting = **Presence** only (not "presence or interest") |
+| Language | English |
+| Bidding | Maximize clicks, max CPC bid limit **$0.60** |
+| Budget | **$5.00/day** average |
+| AI Max | off (text customization, final-URL expansion, all off) |
+| Ad group 1 | 17 phrase-match keywords; one responsive search ad, 15 headlines + 4 descriptions, display path `/AI-Assistant/Chrome` |
+
+Ad-copy rules that must hold for any new creative:
+- **Never put "Claude" or "Anthropic" in ad text** — third-party trademark, risks disapproval. Claude
+  terms are fine as *keywords*.
+- **Never mention crypto / payment coins in ad text.** The landing page's crypto section is already why
+  the account shows a standing "Apply for financial products and services certification" prompt. If an
+  ad is disapproved on those grounds, move that section off the landing page or point the ad elsewhere.
+- Don't call the product free — installing is free but usage is pay-as-you-go per token. Say
+  "no subscription, pay per use".
+
+Wizard gotcha (cost hours on 2026-09-04): the **new-campaign wizard loses the ad group's keywords and
+ad on every navigation**, and a pending "Verify it's you" (reauth type `AD_FINAL_URL`, phone prompt)
+makes every ad save fail with "Changes failed to save" while silently reverting the ad to Google's
+auto-scraped copy. Reliable route: finish the wizard with settings + budget only, publish (it warns
+"campaign that cannot run ads" — accept), then add keywords and the ad from the normal
+**Keywords** and **Ads** pages, which save immediately.
 
 ## Browser automation — always use the dedicated Edge instance on CDP port 9173
 
