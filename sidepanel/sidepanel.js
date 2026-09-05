@@ -97,6 +97,28 @@ function closeUserEventStream() {
 
 async function handleUserEvent(ev) {
   if (!ev || !ev.type) return;
+
+  if (ev.type === 'announcement') {
+    // Immediacy only -- GET /api/user/announcements on load is the delivery
+    // path that catches everything published while the panel was shut.
+    renderAnnouncement({
+      id: ev.id,
+      title: ev.title,
+      body: ev.body,
+      url: ev.url,
+      severity: ev.severity,
+    });
+    return;
+  }
+
+  if (ev.type === 'pcn_deposit') {
+    // Refresh the badge even with the overlay closed, otherwise a user who
+    // deposited an hour ago sees a stale balance until the next panel open.
+    if (ev.stage === 'credited') { try { fetchBalance(); } catch (_) {} }
+    if (typeof isTopUpOverlayOpen === 'function' && isTopUpOverlayOpen()) refreshPcnDeposits();
+    return;
+  }
+
   if (ev.type === 'remote_test') {
     // 1. End any active session first — the running CLI process is bound to
     //    whatever model it was spawned with; switching the dropdown does NOT
@@ -916,6 +938,34 @@ var topupMenuItem = document.getElementById('wai-user-menu-topup');
 if (topupMenuItem) {
   topupMenuItem.addEventListener('click', handleTopUp);
 }
+
+// Top-up overlay: method chooser + PCoin deposit panel. Every way out goes
+// through closeTopUpOverlay() because that is what clears the 30s deposit poll.
+var topupOverlay = document.getElementById('wai-topup-overlay');
+var topupCloseBtn = document.getElementById('wai-topup-close');
+var topupCardMethod = document.getElementById('wai-topup-method-card');
+var topupPcnMethod = document.getElementById('wai-topup-method-pcn');
+
+if (topupCloseBtn) {
+  topupCloseBtn.addEventListener('click', closeTopUpOverlay);
+}
+if (topupOverlay) {
+  topupOverlay.addEventListener('click', function (e) {
+    if (e.target === topupOverlay) closeTopUpOverlay();
+  });
+}
+if (topupCardMethod) {
+  topupCardMethod.addEventListener('click', function () {
+    closeTopUpOverlay();
+    handleNowPaymentsTopUp();
+  });
+}
+if (topupPcnMethod) {
+  topupPcnMethod.addEventListener('click', showPcnPanel);
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && isTopUpOverlayOpen()) closeTopUpOverlay();
+});
 
 // Export chat
 if (exportMenuItem) {

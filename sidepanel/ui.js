@@ -329,6 +329,9 @@ function updateContextMeter() {
 // ---------------------------------------------------------------------------
 function showAuthOverlay() {
   if (authOverlay) authOverlay.style.display = 'flex';
+  // Banners and the deposit panel belong to the account that just went away.
+  clearAnnouncements();
+  closeTopUpOverlay();
   hideAuthError();
   hideAuthSuccess();
   authSubtitle.textContent = 'Sign in to start chatting';
@@ -344,6 +347,9 @@ function showChatUI() {
   });
   pingServer();
   if (typeof openUserEventStream === 'function') openUserEventStream();
+  // The event stream only covers announcements published while the panel is
+  // open; this is what actually delivers the rest.
+  fetchAnnouncements();
   syncPromptsFromServer().then(function () {
     return loadUserSessions();
   }).then(function () {
@@ -384,6 +390,28 @@ function updateUserBadge() {
   });
 }
 
+// Format a USD amount for display.
+//
+// This used to be a bare .toFixed(2). A PCN deposit can credit a fraction of a
+// cent, so the badge read "$0.00" moments after someone sent real coin -- which
+// reads as theft. Show more precision while the number is small, and never
+// round a non-zero balance down to nothing.
+function formatUsd(value) {
+  var n = Number(value);
+  if (!isFinite(n)) n = 0;
+  var sign = n < 0 ? '-' : '';
+  var abs = Math.abs(n);
+  if (abs === 0) return '$0.00';
+  if (abs < 0.0001) {
+    // Smaller than four decimals can show: give the real figure rather than a
+    // rounded-off zero. Trailing zeros are trimmed so it stays readable.
+    var tiny = abs.toFixed(8).replace(/0+$/, '');
+    return /^0\.0*$/.test(tiny) ? sign + '<$0.00000001' : sign + '$' + tiny;
+  }
+  if (abs < 1) return sign + '$' + abs.toFixed(4);
+  return sign + '$' + abs.toFixed(2);
+}
+
 function fetchBalance() {
   if (!authState.accessToken) return;
   authedFetch(SERVER_URL + '/api/billing/balance', {}).then(function (res) {
@@ -391,13 +419,28 @@ function fetchBalance() {
     return null;
   }).then(function (data) {
     if (data) {
-      var balance = '$' + (data.balanceUsd || 0).toFixed(2);
+      var balance = formatUsd(data.balanceUsd || 0);
       if (userBadgeText) userBadgeText.textContent = balance;
     }
   }).catch(function () { /* silent */ });
 }
 
+// ---------------------------------------------------------------------------
+// Top up — method chooser overlay
+// ---------------------------------------------------------------------------
+var PCN_POLL_MS = 30000;
+var PCN_DECIMALS = 8;              // 1 PCN = 100000000 satoshis
+var PCN_ZERO = '0.00000000';
+var _pcnPollTimer = null;
+var _pcnState = null;
+
 function handleTopUp() {
+  openTopUpOverlay();
+}
+
+// The original one-click flow, unchanged: prompt for USD, open a NOWPayments
+// invoice. Reached from the "Card & crypto checkout" card.
+function handleNowPaymentsTopUp() {
   showPrompt('Enter amount in USD to add (min $25):', '25').then(function (amount) {
     if (!amount) return;
     amount = parseFloat(amount);
@@ -421,6 +464,472 @@ function handleTopUp() {
       showAlert('Payment error: ' + e.message);
     });
   });
+}
+
+function topUpOverlayEl() {
+  return document.getElementById('wai-topup-overlay');
+}
+
+function isTopUpOverlayOpen() {
+  var overlay = topUpOverlayEl();
+  return !!(overlay && overlay.style.display !== 'none');
+}
+
+function openTopUpOverlay() {
+  var overlay = topUpOverlayEl();
+  // No markup (older panel HTML) -- fall back to the plain checkout flow.
+  if (!overlay) { handleNowPaymentsTopUp(); return; }
+  showTopUpMethods();
+  overlay.style.display = 'flex';
+  loadPcoinMethod();
+}
+
+// Every exit from the overlay goes through here, because the deposit poll must
+// not outlive it: a side panel can stay open for hours and a leaked 30s
+// interval would keep hitting the API forever.
+function closeTopUpOverlay() {
+  stopPcnPoll();
+  var overlay = topUpOverlayEl();
+  if (overlay) overlay.style.display = 'none';
+}
+
+function showTopUpMethods() {
+  stopPcnPoll();
+  var methods = document.getElementById('wai-topup-methods');
+  var panel = document.getElementById('wai-pcn-panel');
+  var title = document.getElementById('wai-topup-title');
+  if (methods) methods.style.display = '';
+  if (panel) { panel.style.display = 'none'; panel.textContent = ''; }
+  if (title) title.textContent = 'Add funds';
+}
+
+// The PCN card only exists when the server says the rail is live. "disabled"
+// and "unconfigured" are indistinguishable from "no such feature" to a user,
+// so in those cases the overlay shows exactly what it shows today.
+function loadPcoinMethod() {
+  var pcnBtn = document.getElementById('wai-topup-method-pcn');
+  var note = document.getElementById('wai-topup-methods-note');
+  if (pcnBtn) pcnBtn.style.display = 'none';
+  if (note) { note.textContent = 'Checking available methods…'; note.style.display = ''; }
+  if (!authState.accessToken) { if (note) note.style.display = 'none'; return; }
+
+  authedFetch(SERVER_URL + '/api/billing/pcoin', {}).then(function (res) {
+    if (!res.ok) return null;
+    return res.json();
+  }).then(function (data) {
+    if (note) note.style.display = 'none';
+    if (!data || !data.enabled) return;
+    var status = String(data.addressStatus || '');
+    if (status !== 'unclaimed' && status !== 'ok' && status !== 'pool_empty') return;
+    _pcnState = data;
+    if (pcnBtn) pcnBtn.style.display = '';
+  }).catch(function () {
+    if (note) note.style.display = 'none';
+  });
+}
+
+function showPcnPanel() {
+  var methods = document.getElementById('wai-topup-methods');
+  var panel = document.getElementById('wai-pcn-panel');
+  var title = document.getElementById('wai-topup-title');
+  if (methods) methods.style.display = 'none';
+  if (panel) panel.style.display = '';
+  if (title) title.textContent = 'PCoin (PCN) deposit';
+  renderPcnPanel(_pcnState);
+  startPcnPoll();
+}
+
+// ---------------------------------------------------------------------------
+// PCoin helpers
+// ---------------------------------------------------------------------------
+function pcnEl(tag, className, text) {
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function safeHttpUrl(url) {
+  var s = String(url == null ? '' : url).trim();
+  return /^https?:\/\//i.test(s) ? s : null;
+}
+
+// The QR arrives as a data: URI from the server. Only ever hand an <img> a
+// data:image/... value -- anything else is not a picture and has no business
+// in a src attribute.
+function safeImageDataUri(uri) {
+  var s = String(uri == null ? '' : uri).trim();
+  return /^data:image\/(svg\+xml|png|jpeg|gif|webp)[;,]/i.test(s) ? s : null;
+}
+
+// null must fall through to the default, not to Number(null) === 0 -- a
+// missing minConf rendering as "0 confirmations" would be a lie.
+function numberOr(value, fallback) {
+  if (value == null || value === '') return fallback;
+  var n = Number(value);
+  return isFinite(n) ? n : fallback;
+}
+
+// Satoshis are integers and 1e-8 has no exact binary float representation, so
+// the conversion is done by moving the decimal point in a string. Never parse
+// an amount of money into a float.
+function formatPcnFromSat(sat) {
+  var s = String(sat == null ? '' : sat).trim();
+  var sign = '';
+  if (s.charAt(0) === '-') { sign = '-'; s = s.slice(1); }
+  if (!/^[0-9]+$/.test(s)) return null;
+  while (s.length <= PCN_DECIMALS) s = '0' + s;
+  var whole = s.slice(0, s.length - PCN_DECIMALS).replace(/^0+(?=[0-9])/, '');
+  return sign + whole + '.' + s.slice(s.length - PCN_DECIMALS);
+}
+
+// Pad/trim an already-decimal string to exactly 8 places, again without floats.
+function padPcnString(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  var sign = '';
+  if (s.charAt(0) === '-') { sign = '-'; s = s.slice(1); }
+  if (!/^[0-9]*(\.[0-9]*)?$/.test(s) || s === '' || s === '.') return null;
+  var parts = s.split('.');
+  var whole = (parts[0] || '').replace(/^0+(?=[0-9])/, '') || '0';
+  var frac = (parts[1] || '').slice(0, PCN_DECIMALS);
+  while (frac.length < PCN_DECIMALS) frac += '0';
+  return sign + whole + '.' + frac;
+}
+
+// amountSat is the authoritative integer; .pcn is the server's rendering of it.
+function depositPcn(dep) {
+  var fromSat = formatPcnFromSat(dep && dep.amountSat);
+  if (fromSat) return fromSat;
+  var fromString = padPcnString(dep && dep.pcn);
+  return fromString || PCN_ZERO;
+}
+
+// Timestamps are unspecified in the contract -- accept ISO strings as well as
+// epoch seconds and epoch milliseconds.
+function parseServerDate(value) {
+  if (value == null || value === '') return null;
+  var d;
+  if (typeof value === 'number' || /^[0-9]+$/.test(String(value))) {
+    var n = Number(value);
+    d = new Date(n < 100000000000 ? n * 1000 : n);
+  } else {
+    d = new Date(String(value));
+  }
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDepositTime(dep) {
+  var d = parseServerDate(dep && dep.firstSeenAt) || parseServerDate(dep && dep.creditedAt);
+  if (!d) return '';
+  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Blocks average ~10 minutes and the credit gate is 6 confirmations, so this
+// says "about an hour" with the server's real numbers rather than a guess.
+function describeWait(confs, blockMinutes) {
+  var mins = confs * blockMinutes;
+  if (!isFinite(mins) || mins <= 0) return 'about an hour';
+  if (mins < 45) return 'about ' + Math.round(mins) + ' minutes';
+  if (mins < 90) return 'about an hour';
+  return 'about ' + Math.round(mins / 60) + ' hours';
+}
+
+// asOfSeconds is either the age of the quote or the moment it was taken; a
+// value big enough to be a unix timestamp is treated as one.
+function rateAgeSuffix(asOfSeconds) {
+  var n = Number(asOfSeconds);
+  if (!isFinite(n) || n <= 0) return '';
+  var age = n > 1000000000 ? Math.max(0, Math.floor(Date.now() / 1000) - n) : n;
+  if (age < 90) return ' (just now)';
+  if (age < 5400) return ' (' + Math.round(age / 60) + ' min ago)';
+  return ' (' + Math.round(age / 3600) + ' h ago)';
+}
+
+// ---------------------------------------------------------------------------
+// PCoin panel rendering
+// ---------------------------------------------------------------------------
+function renderPcnPanel(state) {
+  var panel = document.getElementById('wai-pcn-panel');
+  if (!panel) return;
+  panel.textContent = '';
+
+  var back = pcnEl('button', 'wai-pcn-back', '← Payment methods');
+  back.type = 'button';
+  back.addEventListener('click', showTopUpMethods);
+  panel.appendChild(back);
+
+  if (!state) {
+    panel.appendChild(pcnEl('div', 'wai-topup-note', 'Loading…'));
+    return;
+  }
+
+  var status = String(state.addressStatus || '');
+
+  if (status === 'pool_empty') {
+    // Deliberately no address of any kind here: showing a recycled or example
+    // address would send someone's coin somewhere it can never be credited.
+    panel.appendChild(pcnEl('div', 'wai-pcn-banner wai-pcn-banner-error',
+      'We can\'t issue a deposit address right now. This is our problem and it has been logged. ' +
+      'Please don\'t send anything until an address appears here.'));
+  } else if (status === 'unclaimed') {
+    panel.appendChild(pcnEl('div', 'wai-topup-note',
+      'Claim your permanent PCN deposit address. It is yours for good — reuse it for every future deposit.'));
+    var claimBtn = pcnEl('button', 'wai-pcn-btn', 'Get my deposit address');
+    claimBtn.type = 'button';
+    claimBtn.style.marginTop = '10px';
+    claimBtn.addEventListener('click', function () { claimPcnAddress(claimBtn); });
+    panel.appendChild(claimBtn);
+  } else if (status === 'ok' && state.address) {
+    renderPcnAddressBlock(panel, state);
+  }
+
+  var deposits = pcnEl('div', 'wai-pcn-deposits');
+  deposits.appendChild(pcnEl('div', 'wai-pcn-label', 'Your deposits'));
+  var list = pcnEl('div');
+  list.id = 'wai-pcn-deposit-list';
+  deposits.appendChild(list);
+  panel.appendChild(deposits);
+  renderPcnDeposits(state.deposits);
+}
+
+function renderPcnAddressBlock(panel, state) {
+  panel.appendChild(pcnEl('div', 'wai-pcn-label', 'Your permanent PCN deposit address'));
+  panel.appendChild(pcnEl('div', 'wai-pcn-address', String(state.address)));
+
+  var qr = safeImageDataUri(state.qrSvg);
+  if (qr) {
+    var img = document.createElement('img');
+    img.className = 'wai-pcn-qr';
+    img.alt = 'QR code of your PCN deposit address';
+    img.src = qr;
+    panel.appendChild(img);
+  }
+
+  var actions = pcnEl('div', 'wai-pcn-actions');
+  var copyBtn = pcnEl('button', 'wai-pcn-btn', 'Copy address');
+  copyBtn.type = 'button';
+  copyBtn.addEventListener('click', function () {
+    copyToClipboard(String(state.address)).then(function () {
+      copyBtn.textContent = 'Copied';
+      setTimeout(function () { copyBtn.textContent = 'Copy address'; }, 1500);
+    }).catch(function () {
+      showAlert('Could not copy automatically. Select the address and copy it manually.');
+    });
+  });
+  actions.appendChild(copyBtn);
+
+  var explorer = safeHttpUrl(state.explorerUrl);
+  if (explorer) {
+    var link = pcnEl('a', 'wai-pcn-link', 'View on block explorer');
+    link.href = explorer;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    actions.appendChild(link);
+  }
+  panel.appendChild(actions);
+
+  var rate = state.rate || {};
+  if (!rate.ok) {
+    panel.appendChild(pcnEl('div', 'wai-pcn-banner wai-pcn-banner-warn',
+      'We can\'t quote a rate at this moment. Anything you send is still recorded and credits ' +
+      'automatically once a rate is available again.'));
+  }
+
+  var minConf = numberOr(state.minConf, 6);
+  var blockMinutes = numberOr(state.blockMinutes, 10);
+  var coinbaseConf = numberOr(state.coinbaseMinConf, 0);
+
+  var meta = pcnEl('div', 'wai-pcn-meta');
+  if (rate.ok && rate.usdPerPcn != null) {
+    meta.appendChild(pcnEl('div', null, 'Rate: 1 PCN = ' + formatUsd(rate.usdPerPcn) + rateAgeSuffix(rate.asOfSeconds)));
+  }
+  // Users who don't know this contact support ten minutes in, convinced the
+  // money is gone. Say the wait out loud.
+  meta.appendChild(pcnEl('div', null,
+    'Credited after ' + minConf + ' confirmations, usually ' + describeWait(minConf, blockMinutes) + '.'));
+  if (coinbaseConf > minConf) {
+    meta.appendChild(pcnEl('div', null, 'Freshly mined coin needs ' + coinbaseConf + ' confirmations.'));
+  }
+  meta.appendChild(pcnEl('div', null, 'Send only PCN to this address.'));
+  panel.appendChild(meta);
+}
+
+function renderPcnDeposits(deposits) {
+  var host = document.getElementById('wai-pcn-deposit-list');
+  if (!host) return;
+  host.textContent = '';
+  var list = Array.isArray(deposits) ? deposits : [];
+  if (!list.length) {
+    host.appendChild(pcnEl('div', 'wai-topup-note', 'No deposits yet. This list updates itself while the panel is open.'));
+    return;
+  }
+  list.forEach(function (dep) {
+    host.appendChild(buildPcnDepositRow(dep || {}));
+  });
+}
+
+function buildPcnDepositRow(dep) {
+  var row = pcnEl('div', 'wai-pcn-deposit');
+  row.appendChild(pcnEl('span', 'wai-pcn-deposit-time', formatDepositTime(dep)));
+  row.appendChild(pcnEl('span', 'wai-pcn-deposit-amount', depositPcn(dep) + ' PCN'));
+
+  var status = String(dep.status || '');
+  var text;
+  var extraClass = '';
+  if (status === 'credited') {
+    text = dep.creditedUsd == null ? 'credited' : 'credited +' + formatUsd(dep.creditedUsd);
+    extraClass = ' is-credited';
+  } else if (status === 'rejected') {
+    text = String(dep.note || 'rejected');
+    extraClass = ' is-rejected';
+  } else if (status === 'confirming') {
+    text = numberOr(dep.confirmations, 0) + ' / ' + numberOr(dep.requiredConf, 6) + ' confirmations';
+  } else {
+    text = 'in the mempool';
+  }
+  row.appendChild(pcnEl('span', 'wai-pcn-deposit-status' + extraClass, text));
+
+  var txUrl = safeHttpUrl(dep.explorerUrl);
+  if (txUrl) {
+    var link = pcnEl('a', 'wai-pcn-link', 'tx');
+    link.href = txUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.title = String(dep.txid || '');
+    row.appendChild(link);
+  }
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// PCoin: claiming an address + polling deposits
+// ---------------------------------------------------------------------------
+function claimPcnAddress(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+  authedFetch(SERVER_URL + '/api/billing/pcoin/address', { method: 'POST' }).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (data) {
+      return { ok: res.ok, status: res.status, data: data || {} };
+    });
+  }).then(function (r) {
+    if (r.ok) {
+      _pcnState = r.data;
+      renderPcnPanel(_pcnState);
+      return;
+    }
+    if (r.status === 409 || r.data.error === 'pool_empty') {
+      _pcnState = Object.assign({}, _pcnState || {}, { addressStatus: 'pool_empty', address: null, qrSvg: null });
+      renderPcnPanel(_pcnState);
+      return;
+    }
+    if (r.status === 503 || r.data.error === 'not_configured') {
+      closeTopUpOverlay();
+      showAlert('PCN deposits are unavailable right now. Please use the card & crypto checkout.');
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Get my deposit address'; }
+    showAlert(friendlyError(r.data.error, 'Could not issue a deposit address'));
+  }).catch(function (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Get my deposit address'; }
+    showAlert('Could not issue a deposit address: ' + e.message);
+  });
+}
+
+function startPcnPoll() {
+  stopPcnPoll();
+  _pcnPollTimer = setInterval(refreshPcnDeposits, PCN_POLL_MS);
+}
+
+function stopPcnPoll() {
+  if (_pcnPollTimer) { clearInterval(_pcnPollTimer); _pcnPollTimer = null; }
+}
+
+function refreshPcnDeposits() {
+  if (!isTopUpOverlayOpen()) { stopPcnPoll(); return; }
+  if (!authState.accessToken) return;
+  authedFetch(SERVER_URL + '/api/billing/pcoin/deposits?limit=25', {}).then(function (res) {
+    if (!res.ok) return null;
+    return res.json();
+  }).then(function (data) {
+    if (!data || !isTopUpOverlayOpen()) return;
+    var list = Array.isArray(data.deposits) ? data.deposits : [];
+    if (_pcnState) _pcnState.deposits = list;
+    renderPcnDeposits(list);
+  }).catch(function () { /* transient — the next tick retries */ });
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast announcements
+// ---------------------------------------------------------------------------
+// The SSE channel only exists while the panel is open, so most announcements
+// never arrive as an event -- GET /api/user/announcements on load is the real
+// delivery path. Both routes end up in renderAnnouncement(), which de-dupes
+// by id so an event and a fetch of the same announcement show one banner.
+var _shownAnnouncements = {};
+
+function fetchAnnouncements() {
+  if (!authState.accessToken) return;
+  authedFetch(SERVER_URL + '/api/user/announcements', {}).then(function (res) {
+    if (!res.ok) return null;
+    return res.json();
+  }).then(function (data) {
+    if (!data || !Array.isArray(data.announcements)) return;
+    data.announcements.forEach(function (a) { renderAnnouncement(a); });
+  }).catch(function () { /* silent — retried next time the panel opens */ });
+}
+
+function renderAnnouncement(a) {
+  if (!a || a.id == null) return;
+  var host = document.getElementById('wai-announcements');
+  if (!host) return;
+  var id = String(a.id);
+  if (_shownAnnouncements[id]) return;
+  _shownAnnouncements[id] = true;
+
+  var severity = String(a.severity || 'info').toLowerCase();
+  if (severity !== 'warning' && severity !== 'critical') severity = 'info';
+
+  var banner = pcnEl('div', 'wai-announce wai-announce-' + severity);
+  var body = pcnEl('div', 'wai-announce-body');
+  if (a.title) body.appendChild(pcnEl('div', 'wai-announce-title', String(a.title)));
+  if (a.body) body.appendChild(pcnEl('div', 'wai-announce-text', String(a.body)));
+
+  var url = safeHttpUrl(a.url);
+  if (url) {
+    var link = pcnEl('a', 'wai-announce-link', 'Learn more');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    body.appendChild(link);
+  }
+  banner.appendChild(body);
+
+  var closeBtn = pcnEl('button', 'wai-announce-close', '×');
+  closeBtn.type = 'button';
+  closeBtn.title = 'Dismiss';
+  closeBtn.addEventListener('click', function () {
+    if (banner.parentNode) banner.parentNode.removeChild(banner);
+    if (!host.children.length) host.style.display = 'none';
+    ackAnnouncement(id);
+  });
+  banner.appendChild(closeBtn);
+
+  host.appendChild(banner);
+  host.style.display = '';
+}
+
+function ackAnnouncement(id) {
+  if (!authState.accessToken) return;
+  authedFetch(SERVER_URL + '/api/user/announcements/' + encodeURIComponent(id) + '/ack', {
+    method: 'POST',
+  }).catch(function () { /* the banner is already gone locally */ });
+}
+
+function clearAnnouncements() {
+  _shownAnnouncements = {};
+  var host = document.getElementById('wai-announcements');
+  if (!host) return;
+  host.textContent = '';
+  host.style.display = 'none';
 }
 
 function showAuthError(msg) {

@@ -55,9 +55,17 @@ function pushToAdmin(path, data) {
 
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.4 }); // every 24 seconds
 
+// Broadcast announcements: the side panel is the only place these are shown,
+// and it is shut most of the time, so poll for them here too and raise a
+// notification. delayInMinutes gives one check shortly after the worker starts
+// instead of waiting a full period.
+chrome.alarms.create('announcementCheck', { delayInMinutes: 1, periodInMinutes: 30 });
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'keepAlive') {
     // Just keep the service worker alive
+  } else if (alarm.name === 'announcementCheck') {
+    checkAnnouncements();
   }
 });
 
@@ -135,6 +143,7 @@ chrome.debugger.onEvent.addListener((source, method, params) => {
 
 // ─── notifications: notify when long AI tasks complete ───────────────────────
 var _notifyTabMap = {};
+var _notifyUrlMap = {};   // notifId → URL to open (announcement notifications)
 
 function notifyTaskComplete(title, message, tabId) {
   var notifId = 'webai-task-' + Date.now();
@@ -148,6 +157,13 @@ function notifyTaskComplete(title, message, tabId) {
 }
 
 chrome.notifications.onClicked.addListener(function (notifId) {
+  var notifUrl = _notifyUrlMap[notifId];
+  if (notifUrl) {
+    delete _notifyUrlMap[notifId];
+    chrome.notifications.clear(notifId);
+    chrome.tabs.create({ url: notifUrl });
+    return;
+  }
   var tabId = _notifyTabMap[notifId];
   delete _notifyTabMap[notifId];
   chrome.notifications.clear(notifId);
@@ -160,6 +176,58 @@ chrome.notifications.onClicked.addListener(function (notifId) {
     });
   }
 });
+
+// ─── Broadcast announcements ─────────────────────────────────────────────────
+// Fired by the announcementCheck alarm. The worker only ever *notifies* --
+// acking is the user dismissing the banner in the side panel, so nothing here
+// touches the ack endpoint. Ids already notified are remembered in storage so
+// the same announcement doesn't ping someone every 30 minutes.
+
+const ANNOUNCEMENTS_SEEN_KEY = 'announcementsNotified';
+
+function checkAnnouncements() {
+  chrome.storage.local.get(['authAccessToken', 'devConfig', ANNOUNCEMENTS_SEEN_KEY], (result) => {
+    const token = result.authAccessToken;
+    if (!token) return;   // signed out: nothing to fetch, nobody to tell
+    const server = (result.devConfig && result.devConfig.server) || ADMIN_PANEL_URL;
+
+    fetch(server + '/api/user/announcements', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    }).then((r) => (r.ok ? r.json() : null)).then((data) => {
+      if (!data || !Array.isArray(data.announcements)) return;
+      const seen = Array.isArray(result[ANNOUNCEMENTS_SEEN_KEY]) ? result[ANNOUNCEMENTS_SEEN_KEY] : [];
+      const live = [];
+      data.announcements.forEach((a) => {
+        if (!a || a.id == null) return;
+        const id = String(a.id);
+        live.push(id);
+        if (seen.indexOf(id) === -1) notifyAnnouncement(id, a);
+      });
+      // Persist exactly what the server still lists: notified ids stay
+      // suppressed, and anything the user acked falls out of the list instead
+      // of growing it forever.
+      if (live.join(',') !== seen.join(',')) {
+        const update = {};
+        update[ANNOUNCEMENTS_SEEN_KEY] = live.slice(0, 200);
+        chrome.storage.local.set(update);
+      }
+    }).catch(() => {});
+  });
+}
+
+function notifyAnnouncement(id, a) {
+  const severity = String(a.severity || 'info').toLowerCase();
+  const notifId = 'webai-announce-' + id;
+  const url = String(a.url || '');
+  if (/^https?:\/\//i.test(url)) _notifyUrlMap[notifId] = url;
+  chrome.notifications.create(notifId, {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    title: (severity === 'critical' ? 'Important: ' : '') + (a.title || 'AI Web Assistant'),
+    message: String(a.body || 'Open the side panel to read this.').substring(0, 300),
+    priority: severity === 'critical' ? 2 : 0,
+  });
+}
 
 // ─── Message Router ───────────────────────────────────────────────────────────
 
