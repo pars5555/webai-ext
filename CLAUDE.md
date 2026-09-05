@@ -113,6 +113,31 @@ state via DOM, click/type via Input). Fall back to **Page.captureScreenshot** wh
 is not enough to tell what is on screen. The user logs in manually in this instance — do not try
 to automate credential entry.
 
+## Rule: never break the published extension
+
+**The server must stay backward compatible with the extension version that is live on the
+Chrome Web Store.** Users update on Google's schedule, not ours, and a store review can take
+days — so at any moment a large share of installs is running the *previous* build against
+today's server. A server change that assumes the new client will break those users with no way
+for them to fix it.
+
+In practice:
+
+- **Never remove or rename an existing API route, request field, or response field.** Add new
+  ones alongside. `GET /api/billing/balance` returning `balanceUsd` must keep returning
+  `balanceUsd` forever, whatever else is added to it.
+- **New behaviour must be opt-in from the client's side, or invisible to a client that does not
+  know about it.** An older sidepanel that has never heard of PCoin must keep working exactly as
+  it does today.
+- **Server-side feature flags are the safe way to ship UI.** Ship the client code inert, let the
+  server decide when it becomes visible. That also means the reviewed build and the live build
+  are the same bytes.
+- **Unknown server-sent event types must be ignored, not fatal** — the extension already
+  dispatches on `ev.type` and drops anything it does not recognise, which is what makes adding
+  new event types safe.
+- Before packaging, diff `manifest.json` against the published release. A new permission forces
+  a fresh review and can silently disable the extension for existing users until they accept it.
+
 ## Gotchas
 
 - `landing/landing/` is a stale duplicate of the old landing page (old "AI Web Assistant" branding) — not served at root, safe to delete.
